@@ -8,8 +8,8 @@ import Control.Monad.Trans.State.Lazy
 import Control.Monad.Trans.Class
 import Control.Monad.ST
 import Control.Monad.Identity
-import qualified Data.Vector as V
-import qualified Data.Vector.Mutable as VM
+import qualified Data.Vector.Unboxed as V
+import qualified Data.Vector.Unboxed.Mutable as VM
 import qualified Data.BitString as BS
 
 bitsNeeded :: Integer -> Integer
@@ -41,7 +41,7 @@ getRandom2 a b string = getRandom2' (getRandom (max' - min') string)
   getRandom2' (random, unused) = (random + min', unused)
 
 -- Could I make this lazy?
-shuffleM :: [a] -> RndST s [a]
+shuffleM :: V.Unbox a => [a] -> RndST s [a]
 shuffleM arr = do
     arr' <- lift $ V.unsafeThaw $ V.fromList arr
     let n = VM.length arr'
