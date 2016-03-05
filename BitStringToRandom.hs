@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module BitStringToRandom (getRandom, getRandom2, RndT, RndST, RndIO, Rnd, getRandomM, getRandom2M, runRndT, newRandomElementST, getRandomElement) where
+module BitStringToRandom (getRandom, getRandom2, RndT, RndST, RndIO, Rnd, getRandomM, getRandom2M, runRndT, newRandomElementST, getRandomElement, randomElementsLength) where
 
 import Data.Bits
 import Control.Monad.Trans.State.Lazy
@@ -48,14 +48,20 @@ getRandomElement :: (V.Unbox a) => STRef s (V.Vector a) -> RndST s a
 getRandomElement ref = do
   vec <- lift $ readSTRef ref
   vec' <- lift $ V.unsafeThaw vec
-  j <- getRandomM $ (toInteger $ VM.length vec') - 1
+  let n = toInteger $ VM.length vec'
+  j <- if n > 0 then getRandomM $ n - 1
+                else error "Out of pixels"
   let j' = fromInteger j
   aa <- lift $ VM.read vec' 0
   ab <- lift $ VM.read vec' j'
   lift $ VM.write vec' j' aa
   vec'' <- lift $ V.unsafeFreeze vec'
-  lift $ writeSTRef ref $ V.tail vec''
+  lift $ writeSTRef ref $ V.unsafeTail vec''
   return ab
+
+randomElementsLength ref = do
+  vec <- lift $ readSTRef ref
+  return $ V.length vec
 
 --fromIntegral
 --realToFrac
