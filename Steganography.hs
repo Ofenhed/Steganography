@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
-import BitStringToRandom (runRndT, newRandomElementST, getRandomElement, getRandomM, randomElementsLength)
+import BitStringToRandom (runRndT, newRandomElementST, getRandomElement, getRandomM, randomElementsLength, replaceSeedM, RndST)
 import PixelStream (getPixels, EncryptedPixel(..))
 import Crypto.Pbkdf2
 import qualified Data.ByteString.Lazy.Char8 as C8
@@ -9,12 +9,14 @@ import Control.Monad.Trans.Class
 import Control.Monad
 import Control.Monad.ST
 import qualified Data.ByteString as BS
-import Data.Word (Word8)
+import Data.Word (Word8, Word32)
 import qualified Data.ByteString.Lazy as LBS
 import Codec.Picture.Png as Png
 import Codec.Picture.Types
 import qualified Data.BitString as BS
 import System.Entropy
+import Data.Bits
+import Debug.Trace
 
 import           System.Console.Command
   (
@@ -22,6 +24,10 @@ import           System.Console.Command
   )
 import           System.Console.Program (single,showUsage)
 import qualified System.Console.Argument as Argument
+
+cRed = 0 :: Word8
+cGreen = 1 :: Word8
+cBlue = 2 :: Word8
 
 myCommands :: Commands IO
 myCommands = Node
@@ -35,20 +41,112 @@ myCommands = Node
 namedFile :: String -> Argument.Type FilePath
 namedFile name = Argument.Type { Argument.name = name, Argument.parser = Right, Argument.defaultValue = Nothing }
 
-doEncrypt image secret loops input = do
-  putStrLn $ "Hello, I'm going to put secrets in " ++ image ++ " aaaaaand it's gone. The secrets, they are gone."
+getRandomBoolM :: RndST s Bool
+getRandomBoolM = do
+  b <- getRandomM 1
+  return $ case b of 1 -> True
+                     0 -> False
 
-doDecrypt image secret loops output = do
-  putStrLn $ "I could not find any secrets in " ++ image ++ " because my stupid writer hasn't implemented that function yet."
+octets :: Word32 -> [Word8]
+octets w = 
+    [ fromIntegral (w `shiftR` 24)
+    , fromIntegral (w `shiftR` 16)
+    , fromIntegral (w `shiftR` 8)
+    , fromIntegral w
+    ]
+
+fromOctets :: [Word8] -> Word32
+fromOctets = Prelude.foldl accum 0
+  where
+    accum a o = (a `shiftL` 8) .|. fromIntegral o
+
+readBits pixels image bits = do
+  read <- forM [1..bits] $ \_ -> do
+    (x, y, c) <- getRandomElement pixels
+    let x' = fromInteger $ toInteger x
+    let y' = fromInteger $ toInteger y
+    inv <- getRandomBoolM
+    let (PixelRGBA8 red green blue alpha) = pixelAt image x' y'
+    let p = case c of 0 -> red .&. 1
+                      1 -> green .&. 1
+                      2 -> blue .&. 1
+    return $ xor inv $ case p of 1 -> True
+                                 0 -> False
+  return $ BS.fromList read
+
+readBytes pixels image bytes = do
+  bits <- readBits pixels image (bytes * 8)
+  return $ BS.realizeBitStringLazy bits
+
+writeBits pixels image bits = forM_ (BS.toList bits) $ \bit -> do
+    (x, y, c) <- getRandomElement pixels
+    enc <- getRandomBoolM
+    let x' = fromInteger $ toInteger x
+    let y' = fromInteger $ toInteger y
+    (PixelRGBA8 red green blue alpha) <- lift $ readPixel image x' y'
+    let newBit = case xor enc bit of True -> 1
+                                     False -> 0
+    let red' = if c == 0 then (red .&. (complement 1)) .|. newBit
+                         else red
+    let green' = if c == 1 then (green .&. (complement 1)) .|. newBit
+                           else green
+    let blue' = if c == 2 then (blue .&. (complement 1)) .|. newBit
+                          else blue
+    lift $ writePixel image x' y' $ PixelRGBA8 red' green' blue' alpha
+
+writeBytes pixels image bytes = writeBits pixels image (BS.bitStringLazy bytes)
+
+
+--writeBits pixels image bits = forM_ bits $ \bit -> do
+--  (x, y, c) <- getRandomElement pixels
+--  enc <- getRandomM 1
+
+
+doEncrypt imageFile secretFile loops inputFile = do
+  a <- BS.readFile imageFile
+  secret <- LBS.readFile secretFile
+  input <- LBS.readFile inputFile
+  let Right (ImageRGBA8 image@(Image w h _), metadata) = decodePngWithMetadata a
+  let (newImage,_) = runST $ runRndT (BS.bitStringLazy $ hmacSha512Pbkdf2 secret (C8.pack "") loops) $ do
+              pixels <- lift $ newRandomElementST $ getPixels (fromInteger . toInteger $ w) (fromInteger $ toInteger $ h)
+              random <- readBytes pixels image 32
+              replaceSeedM (BS.bitStringLazy $ hmacSha512Pbkdf2 secret random loops)
+              mutable <- lift $ unsafeThawImage image
+              let dataLen = toInteger $ LBS.length input
+              writeBytes pixels mutable (LBS.pack $ octets $ fromInteger $ dataLen)
+              len <- randomElementsLength pixels
+              let availLen = (quot (toInteger len) 8)
+              if availLen < dataLen then error $ "The file doesn't fit in this image, the image can hold " ++ (show availLen) ++ " bytes maximum"
+                                    else do
+                                      writeBytes pixels mutable input
+                                      result <- lift $ unsafeFreezeImage mutable
+                                      return result
+  let newImage' = encodePngWithMetadata metadata newImage
+  if (LBS.length newImage') > 0 then LBS.writeFile imageFile $ encodePngWithMetadata metadata newImage
+                                else return ()
+
+doDecrypt imageFile secretFile loops output = do
+  a <- BS.readFile imageFile
+  secret <- LBS.readFile secretFile
+  let Right (ImageRGBA8 image@(Image w h _), metadata) = decodePngWithMetadata a
+  let (r,_) = runST $ runRndT (BS.bitStringLazy $ hmacSha512Pbkdf2 secret (C8.pack "") loops) $ do
+              pixels <- lift $ newRandomElementST $ getPixels (fromInteger . toInteger $ w) (fromInteger $ toInteger $ h)
+              random <- readBytes pixels image 32
+              replaceSeedM (BS.bitStringLazy $ hmacSha512Pbkdf2 secret random loops)
+              dataLen <- readBytes pixels image 4
+              let dataLen' = toInteger $ fromOctets $ LBS.unpack dataLen
+              hiddenData <- readBytes pixels image dataLen'
+              return hiddenData
+  LBS.writeFile output r
 
 encrypt,decrypt,help :: Command IO
-encrypt = command "encrypt" "Encrypt and hide a file into a PNG file. Notice that it will overwrite the image file." $ 
+encrypt = command "encrypt" "Encrypt and hide a file into a PNG file. Notice that it will overwrite the image file. SHARED-SECRET-FILE is the key. INT is the complexity of the PRNG function, higher takes longer time and is therefore more secure. INPUT-FILE is the file to be hidden in the image." $ 
           withNonOption (namedFile "IMAGE-FILE") $ \image ->
             withNonOption (namedFile "SHARED-SECRET-FILE") $ \secret -> 
               withNonOption Argument.integer $ \loops ->
                withNonOption (namedFile "INPUT-FILE") $ \file -> io $ doEncrypt image secret loops file
 
-decrypt = command "decrypt" "Get data from a PNG file" $
+decrypt = command "decrypt" "Get data from a PNG file. Both the SHARED-SECRET-FILE and INT has to be the same as when the file was encrypted. OUTPUT-FILE will be overwritten without warning." $
           withNonOption (namedFile "IMAGE-FILE") $ \image ->
             withNonOption (namedFile "SHARED-SECRET-FILE") $ \secret -> 
               withNonOption Argument.integer $ \loops ->
@@ -57,36 +155,3 @@ decrypt = command "decrypt" "Get data from a PNG file" $
 help = command "help" "Show usage info" $ io (showUsage myCommands)
 
 main = single myCommands
-
---requiredFile :: Argument.Type FilePath
---requiredFile = Argument.Type
---  {
---    Argument.parser = \x -> Just x
---  , Argument.name   = "FILE"
---  , Argument.defaultValue = Nothing
---  }
-
---main = do
---  random <- getEntropy 256
---  let (pixels,_) = runST $ runRndT (BS.bitStringLazy $ hmacSha512Pbkdf2 (C8.pack "password") (C8.pack "salt") 100000) $ do
---                   pixels <- lift $ newRandomElementST $ getPixels 1920 1080
---                   length <- randomElementsLength pixels
---                   forM [1..100] $ \_ -> do
---                     pix <- getRandomElement pixels
---                     enc <- getRandomM 1
---                     let enc' = case enc of 1 -> True
---                                            0 -> False
---                     return $ EncryptedPixel pix enc'
---  Prelude.putStrLn $ (show pixels) ++ " " ++ (show random)
-
---main = do
---  a <- BS.readFile "Test.png"
---  let Right (ImageRGBA8 image@(Image w h _), metadata) = decodePngWithMetadata a
---  do
---    mutable <- thawImage image
---    writePixel mutable 0 0 (PixelRGBA8 0 255 255 255)
---    pixel <- readPixel mutable 0 0
---    Prelude.putStrLn (show pixel)
---    newImage <- freezeImage mutable
---    let encodedImage = encodePngWithMetadata metadata newImage
---    BS.writeFile "Test2.png" (LBS.toStrict encodedImage)
