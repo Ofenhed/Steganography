@@ -1,10 +1,12 @@
 {-# LANGUAGE FlexibleContexts #-}
-import BitStringToRandom (runRndT, shuffleM)
-import PixelStream (getPixels, addPixelsEncryptionM)
+import BitStringToRandom (runRndT, newRandomElementST, getRandomElement, getRandomM)
+import PixelStream (getPixels, EncryptedPixel(..))
 import Crypto.Pbkdf2
 import qualified Data.ByteString.Lazy.Char8 as C8
 
 import Data.Array.IO
+import Control.Monad.Trans.Class
+import Data.Traversable
 import Control.Monad.ST
 import qualified Data.ByteString as BS
 import Data.Word (Word8)
@@ -14,11 +16,15 @@ import Codec.Picture.Types
 import qualified Data.BitString as BS
 
 main = do
-  let (pixels,_) = runST $ runRndT (BS.bitStringLazy $ hmacSha512Pbkdf2 (C8.pack "password") (C8.pack "salt") 2) $ do
-                   pixels <- shuffleM $ getPixels 1920 1080
-                   encryptedPixels <- addPixelsEncryptionM pixels
-                   return encryptedPixels
-  Prelude.putStrLn $ (show $ Prelude.length pixels) ++ (show $ Prelude.take 20 pixels)
+  let (pixels,_) = runST $ runRndT (BS.bitStringLazy $ hmacSha512Pbkdf2 (C8.pack "password") (C8.pack "salt") 10000) $ do
+                   pixels <- lift $ newRandomElementST $ getPixels 1920 1080
+                   forM [1..2000] $ \_ -> do
+                     pix <- getRandomElement pixels
+                     enc <- getRandomM 1
+                     let enc' = case enc of 1 -> True
+                                            0 -> False
+                     return $ EncryptedPixel pix enc'
+  Prelude.putStrLn $ (show $ Prelude.length pixels) ++ (show $ pixels)
 
 --main = do
 --  a <- BS.readFile "Test.png"

@@ -1,4 +1,4 @@
-module PixelStream (getPixels, addPixelsEncryptionM, Pixel, EncryptedPixel) where
+module PixelStream (getPixels, Pixel, EncryptedPixel(..)) where
 
 import BitStringToRandom (RndST, getRandomM)
 import qualified Data.BitString as BS
@@ -17,11 +17,3 @@ getPixels x y = do
   y <- [0..y-1] :: [Word32]
   z <- [0..2] :: [Word8]
   return $ (x, y, z)
-
-addPixelsEncryptionM :: [Pixel] -> RndST s [EncryptedPixel]
-addPixelsEncryptionM pixels = do
-  forM pixels $ \pixel -> do
-    invertBit <- getRandomM 1
-    let invertBit' = case invertBit of 1 -> True
-                                       0 -> False
-    return $ EncryptedPixel pixel invertBit'

@@ -1,13 +1,14 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module BitStringToRandom (getRandom, getRandom2, RndT, RndST, RndIO, Rnd, getRandomM, getRandom2M, shuffleM, runRndT) where
+module BitStringToRandom (getRandom, getRandom2, RndT, RndST, RndIO, Rnd, getRandomM, getRandom2M, runRndT, newRandomElementST, getRandomElement) where
 
 import Data.Bits
 import Control.Monad.Trans.State.Lazy
 import Control.Monad.Trans.Class
 import Control.Monad.ST
 import Control.Monad.Identity
+import Data.STRef
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as VM
 import qualified Data.BitString as BS
@@ -40,18 +41,21 @@ getRandom2 a b string = getRandom2' (getRandom (max' - min') string)
   max' = max a b
   getRandom2' (random, unused) = (random + min', unused)
 
--- Could I make this lazy?
-shuffleM :: V.Unbox a => [a] -> RndST s [a]
-shuffleM arr = do
-    arr' <- lift $ V.unsafeThaw $ V.fromList arr
-    let n = VM.length arr'
-    forM [0..n-2] $ \i -> do
-      j <- getRandom2M (toInteger i) (toInteger $ n - 1)
-      let j' = fromIntegral j
-      aa <- lift $ VM.read arr' i
-      ab <- lift $ VM.read arr' j'
-      lift $ VM.write arr' j' aa
-      return ab
+newRandomElementST :: VM.Unbox a => [a] -> ST s (STRef s (V.Vector a))
+newRandomElementST acc = newSTRef $ V.fromList acc
+
+getRandomElement :: (V.Unbox a) => STRef s (V.Vector a) -> RndST s a
+getRandomElement ref = do
+  vec <- lift $ readSTRef ref
+  vec' <- lift $ V.unsafeThaw vec
+  j <- getRandomM $ (toInteger $ VM.length vec') - 1
+  let j' = fromInteger j
+  aa <- lift $ VM.read vec' 0
+  ab <- lift $ VM.read vec' j'
+  lift $ VM.write vec' j' aa
+  vec'' <- lift $ V.unsafeFreeze vec'
+  lift $ writeSTRef ref $ V.tail vec''
+  return ab
 
 --fromIntegral
 --realToFrac
