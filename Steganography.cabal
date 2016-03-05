@@ -25,7 +25,8 @@ Executable Steganography
                      vector,
                      Lazy-Pbkdf2,
                      array,
-                     bitstring
+                     bitstring,
+                     console-program
                    
 
 Test-Suite ByteStreamToRandom
