@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module BitStringToRandom (getRandom, getRandom2, RndT, RndST, RndIO, Rnd, getRandomM, getRandom2M, runRndT, newRandomElementST, getRandomElement, randomElementsLength) where
+module BitStringToRandom (getRandom, getRandom2, RndT, RndST, RndIO, Rnd, getRandomM, getRandom2M, runRndT, newRandomElementST, getRandomElement, randomElementsLength, replaceSeedM) where
 
 import Data.Bits
 import Control.Monad.Trans.State.Lazy
@@ -75,6 +75,9 @@ newtype RndT m a = RndT
 type RndST s a = RndT (ST s) a
 type RndIO a = RndT IO a
 type Rnd a = RndT Identity a
+
+replaceSeedM :: Monad m => RndState -> RndT m ()
+replaceSeedM s = RndT $ put s
 
 getRandomM :: Monad m => Integer -> RndT m Integer
 getRandomM x = RndT $ state $ getRandom x
