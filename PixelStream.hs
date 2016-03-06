@@ -1,15 +1,8 @@
-module PixelStream (getPixels, Pixel, EncryptedPixel(..)) where
+module PixelStream (getPixels, Pixel) where
 
-import BitStringToRandom (RndST, getRandomM)
-import qualified Data.BitString as BS
-import Control.Monad.ST
-import Data.Traversable
 import Data.Word (Word32, Word8)
 
-
 type Pixel = (Word32, Word32, Word8)
-
-data EncryptedPixel = EncryptedPixel { pix :: Pixel, invertBit :: Bool } deriving (Show)
 
 getPixels :: Word32 -> Word32 -> [Pixel]
 getPixels x y = do

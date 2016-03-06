@@ -1,28 +1,30 @@
 {-# LANGUAGE FlexibleContexts #-}
-import BitStringToRandom (runRndT, newRandomElementST, getRandomElement, getRandomM, randomElementsLength, replaceSeedM, RndST)
-import PixelStream (getPixels, EncryptedPixel(..))
+import BitStringToRandom
+  (
+   runRndT, newRandomElementST, randomElementsLength, replaceSeedM
+  )
+import PixelStream (getPixels)
+import ImageFileHandler (readBytes, writeBytes)
+
 import Crypto.Pbkdf2
-import qualified Data.ByteString.Lazy.Char8 as C8
 
-import Data.Array.IO
-import Control.Monad.Trans.Class
-import Control.Monad
-import Control.Monad.ST
-import qualified Data.ByteString as BS
 import Data.Word (Word8, Word32)
-import qualified Data.ByteString.Lazy as LBS
-import Codec.Picture.Png as Png
-import Codec.Picture.Types
-import qualified Data.BitString as BS
-import System.Entropy
-import Data.Bits
-import Debug.Trace
-
-import           System.Console.Command
+import System.Console.Command
   (
    Commands,Tree(Node),Command,command,withOption,withNonOption,io
   )
-import           System.Console.Program (single,showUsage)
+import System.Console.Program (single,showUsage)
+
+import Codec.Picture.Png
+import Codec.Picture.Types
+import Control.Monad.ST
+import Control.Monad.Trans.Class
+import Data.Bits
+
+import qualified Data.BitString as BS
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Lazy.Char8 as C8
 import qualified System.Console.Argument as Argument
 
 cRed = 0 :: Word8
@@ -38,15 +40,6 @@ myCommands = Node
     Node help []
   ]
 
-namedFile :: String -> Argument.Type FilePath
-namedFile name = Argument.Type { Argument.name = name, Argument.parser = Right, Argument.defaultValue = Nothing }
-
-getRandomBoolM :: RndST s Bool
-getRandomBoolM = do
-  b <- getRandomM 1
-  return $ case b of 1 -> True
-                     0 -> False
-
 octets :: Word32 -> [Word8]
 octets w = 
     [ fromIntegral (w `shiftR` 24)
@@ -59,48 +52,6 @@ fromOctets :: [Word8] -> Word32
 fromOctets = Prelude.foldl accum 0
   where
     accum a o = (a `shiftL` 8) .|. fromIntegral o
-
-readBits pixels image bits = do
-  read <- forM [1..bits] $ \_ -> do
-    (x, y, c) <- getRandomElement pixels
-    let x' = fromInteger $ toInteger x
-    let y' = fromInteger $ toInteger y
-    inv <- getRandomBoolM
-    let (PixelRGBA8 red green blue alpha) = pixelAt image x' y'
-    let p = case c of 0 -> red .&. 1
-                      1 -> green .&. 1
-                      2 -> blue .&. 1
-    return $ xor inv $ case p of 1 -> True
-                                 0 -> False
-  return $ BS.fromList read
-
-readBytes pixels image bytes = do
-  bits <- readBits pixels image (bytes * 8)
-  return $ BS.realizeBitStringLazy bits
-
-writeBits pixels image bits = forM_ (BS.toList bits) $ \bit -> do
-    (x, y, c) <- getRandomElement pixels
-    enc <- getRandomBoolM
-    let x' = fromInteger $ toInteger x
-    let y' = fromInteger $ toInteger y
-    (PixelRGBA8 red green blue alpha) <- lift $ readPixel image x' y'
-    let newBit = case xor enc bit of True -> 1
-                                     False -> 0
-    let red' = if c == 0 then (red .&. (complement 1)) .|. newBit
-                         else red
-    let green' = if c == 1 then (green .&. (complement 1)) .|. newBit
-                           else green
-    let blue' = if c == 2 then (blue .&. (complement 1)) .|. newBit
-                          else blue
-    lift $ writePixel image x' y' $ PixelRGBA8 red' green' blue' alpha
-
-writeBytes pixels image bytes = writeBits pixels image (BS.bitStringLazy bytes)
-
-
---writeBits pixels image bits = forM_ bits $ \bit -> do
---  (x, y, c) <- getRandomElement pixels
---  enc <- getRandomM 1
-
 
 doEncrypt imageFile secretFile loops inputFile salt = do
   a <- BS.readFile imageFile
@@ -157,6 +108,9 @@ decrypt = command "decrypt" "Get data from a PNG file. Both the SHARED-SECRET-FI
               withNonOption Argument.integer $ \loops ->
                 withNonOption (namedFile "OUTPUT-FILE") $ \file ->
                   withOption saltOption $ \salt -> io $ doDecrypt image secret loops file (C8.pack salt)
+
+namedFile :: String -> Argument.Type FilePath
+namedFile name = Argument.Type { Argument.name = name, Argument.parser = Right, Argument.defaultValue = Nothing }
 
 saltOption :: Argument.Option String
 saltOption = Argument.option ['s'] ["salt"] Argument.string "" "A salt to be applied to the encryption"
