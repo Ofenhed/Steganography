@@ -53,13 +53,15 @@ fromOctets = Prelude.foldl accum 0
   where
     accum a o = (a `shiftL` 8) .|. fromIntegral o
 
+toNum = fromInteger . toInteger
+
 doEncrypt imageFile secretFile loops inputFile salt = do
   a <- BS.readFile imageFile
   secret <- LBS.readFile secretFile
   input <- LBS.readFile inputFile
   let Right (ImageRGBA8 image@(Image w h _), metadata) = decodePngWithMetadata a
   let (newImage,_) = runST $ runRndT (BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops) $ do
-              pixels <- lift $ newRandomElementST $ getPixels (fromInteger . toInteger $ w) (fromInteger $ toInteger $ h)
+              pixels <- lift $ newRandomElementST $ getPixels (toNum w) (toNum h)
               random <- readBytes pixels image 32
               replaceSeedM (BS.bitStringLazy $ hmacSha512Pbkdf2 secret (LBS.append random salt) loops)
               mutable <- lift $ unsafeThawImage image
@@ -81,7 +83,7 @@ doDecrypt imageFile secretFile loops output salt = do
   secret <- LBS.readFile secretFile
   let Right (ImageRGBA8 image@(Image w h _), metadata) = decodePngWithMetadata a
   let (r,_) = runST $ runRndT (BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops) $ do
-              pixels <- lift $ newRandomElementST $ getPixels (fromInteger . toInteger $ w) (fromInteger $ toInteger $ h)
+              pixels <- lift $ newRandomElementST $ getPixels (toNum w) (toNum h)
               random <- readBytes pixels image 32
               replaceSeedM (BS.bitStringLazy $ hmacSha512Pbkdf2 secret (LBS.append random salt) loops)
               dataLen <- readBytes pixels image 4
