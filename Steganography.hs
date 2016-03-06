@@ -102,15 +102,15 @@ writeBytes pixels image bytes = writeBits pixels image (BS.bitStringLazy bytes)
 --  enc <- getRandomM 1
 
 
-doEncrypt imageFile secretFile loops inputFile = do
+doEncrypt imageFile secretFile loops inputFile salt = do
   a <- BS.readFile imageFile
   secret <- LBS.readFile secretFile
   input <- LBS.readFile inputFile
   let Right (ImageRGBA8 image@(Image w h _), metadata) = decodePngWithMetadata a
-  let (newImage,_) = runST $ runRndT (BS.bitStringLazy $ hmacSha512Pbkdf2 secret (C8.pack "") loops) $ do
+  let (newImage,_) = runST $ runRndT (BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops) $ do
               pixels <- lift $ newRandomElementST $ getPixels (fromInteger . toInteger $ w) (fromInteger $ toInteger $ h)
               random <- readBytes pixels image 32
-              replaceSeedM (BS.bitStringLazy $ hmacSha512Pbkdf2 secret random loops)
+              replaceSeedM (BS.bitStringLazy $ hmacSha512Pbkdf2 secret (LBS.append random salt) loops)
               mutable <- lift $ unsafeThawImage image
               let dataLen = toInteger $ LBS.length input
               writeBytes pixels mutable (LBS.pack $ octets $ fromInteger $ dataLen)
@@ -125,32 +125,41 @@ doEncrypt imageFile secretFile loops inputFile = do
   if (LBS.length newImage') > 0 then LBS.writeFile imageFile $ encodePngWithMetadata metadata newImage
                                 else return ()
 
-doDecrypt imageFile secretFile loops output = do
+doDecrypt imageFile secretFile loops output salt = do
   a <- BS.readFile imageFile
   secret <- LBS.readFile secretFile
   let Right (ImageRGBA8 image@(Image w h _), metadata) = decodePngWithMetadata a
-  let (r,_) = runST $ runRndT (BS.bitStringLazy $ hmacSha512Pbkdf2 secret (C8.pack "") loops) $ do
+  let (r,_) = runST $ runRndT (BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops) $ do
               pixels <- lift $ newRandomElementST $ getPixels (fromInteger . toInteger $ w) (fromInteger $ toInteger $ h)
               random <- readBytes pixels image 32
-              replaceSeedM (BS.bitStringLazy $ hmacSha512Pbkdf2 secret random loops)
+              replaceSeedM (BS.bitStringLazy $ hmacSha512Pbkdf2 secret (LBS.append random salt) loops)
               dataLen <- readBytes pixels image 4
               let dataLen' = toInteger $ fromOctets $ LBS.unpack dataLen
-              hiddenData <- readBytes pixels image dataLen'
-              return hiddenData
-  LBS.writeFile output r
+              len <- randomElementsLength pixels
+              if dataLen' > ((*) 8 $ toInteger len) then return Nothing
+                                                     else do
+                                                       hiddenData <- readBytes pixels image dataLen'
+                                                       return $ Just hiddenData
+  case r of Nothing -> putStrLn "No hidden data found"
+            Just x -> LBS.writeFile output x
 
 encrypt,decrypt,help :: Command IO
 encrypt = command "encrypt" "Encrypt and hide a file into a PNG file. Notice that it will overwrite the image file. SHARED-SECRET-FILE is the key. INT is the complexity of the PRNG function, higher takes longer time and is therefore more secure. INPUT-FILE is the file to be hidden in the image." $ 
           withNonOption (namedFile "IMAGE-FILE") $ \image ->
             withNonOption (namedFile "SHARED-SECRET-FILE") $ \secret -> 
               withNonOption Argument.integer $ \loops ->
-               withNonOption (namedFile "INPUT-FILE") $ \file -> io $ doEncrypt image secret loops file
+                withNonOption (namedFile "INPUT-FILE") $ \file ->
+                  withOption saltOption $ \salt -> io $ doEncrypt image secret loops file (C8.pack salt)
 
 decrypt = command "decrypt" "Get data from a PNG file. Both the SHARED-SECRET-FILE and INT has to be the same as when the file was encrypted. OUTPUT-FILE will be overwritten without warning." $
           withNonOption (namedFile "IMAGE-FILE") $ \image ->
             withNonOption (namedFile "SHARED-SECRET-FILE") $ \secret -> 
               withNonOption Argument.integer $ \loops ->
-                withNonOption (namedFile "OUTPUT-FILE") $ \file -> io $ doDecrypt image secret loops file
+                withNonOption (namedFile "OUTPUT-FILE") $ \file ->
+                  withOption saltOption $ \salt -> io $ doDecrypt image secret loops file (C8.pack salt)
+
+saltOption :: Argument.Option String
+saltOption = Argument.option ['s'] ["salt"] Argument.string "" "A salt to be applied to the encryption"
 
 help = command "help" "Show usage info" $ io (showUsage myCommands)
 
