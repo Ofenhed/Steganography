@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 import BitStringToRandom
   (
-   runRndT, newRandomElementST, randomElementsLength, replaceSeedM
+   runRndT, newRandomElementST, randomElementsLength, replaceSeedM, addSeedM
   )
 import PixelStream (getPixels)
 import ImageFileHandler (readBytes, writeBytes)
@@ -60,10 +60,10 @@ doEncrypt imageFile secretFile loops inputFile salt = do
   secret <- LBS.readFile secretFile
   input <- LBS.readFile inputFile
   let Right (ImageRGBA8 image@(Image w h _), metadata) = decodePngWithMetadata a
-  let (newImage,_) = runST $ runRndT (BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops) $ do
+  let (newImage,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ do
               pixels <- lift $ newRandomElementST $ getPixels (toNum w) (toNum h)
               random <- readBytes pixels image 32
-              replaceSeedM (BS.bitStringLazy $ hmacSha512Pbkdf2 secret (LBS.append random salt) loops)
+              addSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret (LBS.append random salt) loops)]
               mutable <- lift $ unsafeThawImage image
               let dataLen = toInteger $ LBS.length input
               writeBytes pixels mutable (LBS.pack $ octets $ fromInteger $ dataLen)
@@ -82,10 +82,10 @@ doDecrypt imageFile secretFile loops output salt = do
   a <- BS.readFile imageFile
   secret <- LBS.readFile secretFile
   let Right (ImageRGBA8 image@(Image w h _), metadata) = decodePngWithMetadata a
-  let (r,_) = runST $ runRndT (BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops) $ do
+  let (r,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ do
               pixels <- lift $ newRandomElementST $ getPixels (toNum w) (toNum h)
               random <- readBytes pixels image 32
-              replaceSeedM (BS.bitStringLazy $ hmacSha512Pbkdf2 secret (LBS.append random salt) loops)
+              addSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret (LBS.append random salt) loops)]
               dataLen <- readBytes pixels image 4
               let dataLen' = toInteger $ fromOctets $ LBS.unpack dataLen
               len <- randomElementsLength pixels
@@ -115,7 +115,7 @@ namedFile :: String -> Argument.Type FilePath
 namedFile name = Argument.Type { Argument.name = name, Argument.parser = Right, Argument.defaultValue = Nothing }
 
 saltOption :: Argument.Option String
-saltOption = Argument.option ['s'] ["salt"] Argument.string "" "A salt to be applied to the encryption"
+saltOption = Argument.option ['s'] ["salt"] Argument.string "" "A salt to be applied to the encryption."
 
 help = command "help" "Show usage info" $ io (showUsage myCommands)
 
