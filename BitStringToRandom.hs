@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module BitStringToRandom (getRandom, getRandom2, RndT, RndST, RndIO, Rnd, getRandomM, getRandom2M, runRndT, newRandomElementST, getRandomElement, randomElementsLength, replaceSeedM, addSeedM) where
+module BitStringToRandom (RndT, RndST, RndIO, Rnd, RndState, getRandomM, getRandom2M, runRndT, newRandomElementST, getRandomElement, randomElementsLength, replaceSeedM, addSeedM, getRandomByteStringM) where
 
 import Data.Bits
 import Control.Monad.Trans.State.Lazy
@@ -9,9 +9,11 @@ import Control.Monad.Trans.Class
 import Control.Monad.ST
 import Control.Monad.Identity
 import Data.STRef
+import Control.Parallel.Strategies
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as VM
 import qualified Data.BitString as BS
+import qualified Data.ByteString.Lazy as ByS
 
 bitsNeeded :: Integer -> Integer
 bitsNeeded x = (+) 1 $ floor $ logBase 2 (fromIntegral x)
@@ -21,10 +23,11 @@ convertBitStringToInteger = BS.foldl' convert' 0
   convert' :: Integer -> Bool -> Integer
   convert' prev cur = (shiftL prev 1) .|. (case cur of True -> 1 ; False -> 0)
 
-multipleBitstringsSplitAt i = split' [] []
+multipleBitstringsSplitAt i x = join' (split' x) [] []
  where
- split' takers droppers [] = (takers, droppers)
- split' takers droppers (x:xs) = let (newTake, newDrop) = BS.splitAt i x in split' (newTake:takers) (newDrop:droppers) xs
+ split' = parMap rpar (\bs -> let (take,drop) = BS.splitAt i bs in (take `using` rseq, drop))
+ join' [] takers droppers = (takers, droppers)
+ join' (x:xs) takers droppers = let (newTake, newDrop) = x in join' xs (newTake:takers) (newDrop:droppers)
 
 multipleBitstringsAssertLength len [] = False
 multipleBitstringsAssertLength len x = len' x
@@ -54,6 +57,10 @@ getRandom2 a b string = getRandom2' (getRandom (max' - min') string)
   min' = min a b
   max' = max a b
   getRandom2' (random, unused) = (random + min', unused)
+
+getRandomByteString :: Integer -> [BS.BitString] -> (ByS.ByteString, [BS.BitString])
+getRandomByteString 0 x = (ByS.pack [], x)
+getRandomByteString len x = let (byte, newState) = getRandom 255 x ; (allBytes, lastState) = getRandomByteString (len - 1) newState in (ByS.cons (fromIntegral byte) allBytes, lastState)
 
 newRandomElementST :: VM.Unbox a => [a] -> ST s (STRef s (V.Vector a))
 newRandomElementST acc = newSTRef $ V.fromList acc
@@ -104,6 +111,9 @@ getRandomM x = RndT $ state $ getRandom x
 
 getRandom2M :: Monad m => Integer -> Integer -> RndT m Integer
 getRandom2M x y = RndT $ state $ getRandom2 x y
+
+getRandomByteStringM :: Monad m => Integer -> RndT m ByS.ByteString
+getRandomByteStringM x = RndT $ state $ getRandomByteString x
 
 runRndT :: RndState -> RndT m a -> m (a, RndState)
 runRndT rnd m = runStateT (unRndT m) rnd

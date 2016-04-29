@@ -1,10 +1,11 @@
 {-# LANGUAGE FlexibleContexts #-}
 import BitStringToRandom
   (
-   runRndT, newRandomElementST, randomElementsLength, replaceSeedM, addSeedM
+   runRndT, newRandomElementST, randomElementsLength, replaceSeedM, addSeedM, getRandomByteStringM
   )
 import PixelStream (getPixels)
 import ImageFileHandler (readBytes, writeBytes)
+import AesEngine (createAes256RngState)
 
 import Crypto.Pbkdf2
 
@@ -55,6 +56,15 @@ fromOctets = Prelude.foldl accum 0
 
 toNum = fromInteger . toInteger
 
+createRandomStates pixels image salt = do
+  random <- readBytes pixels image 256
+  newPbkdfSecret <- getRandomByteStringM 256
+  replaceSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 newPbkdfSecret (LBS.append random salt) 5)]
+  aesSecret <- getRandomByteStringM 32
+  aesIv <- getRandomByteStringM 16
+  addSeedM (createAes256RngState aesSecret aesIv)
+
+
 doEncrypt imageFile secretFile loops inputFile salt = do
   a <- BS.readFile imageFile
   secret <- LBS.readFile secretFile
@@ -62,8 +72,7 @@ doEncrypt imageFile secretFile loops inputFile salt = do
   let Right (ImageRGBA8 image@(Image w h _), metadata) = decodePngWithMetadata a
   let (newImage,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ do
               pixels <- lift $ newRandomElementST $ getPixels (toNum w) (toNum h)
-              random <- readBytes pixels image 32
-              addSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret (LBS.append random salt) loops)]
+              createRandomStates pixels image salt
               mutable <- lift $ unsafeThawImage image
               let dataLen = toInteger $ LBS.length input
               writeBytes pixels mutable (LBS.pack $ octets $ fromInteger $ dataLen)
@@ -84,8 +93,7 @@ doDecrypt imageFile secretFile loops output salt = do
   let Right (ImageRGBA8 image@(Image w h _), metadata) = decodePngWithMetadata a
   let (r,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ do
               pixels <- lift $ newRandomElementST $ getPixels (toNum w) (toNum h)
-              random <- readBytes pixels image 32
-              addSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret (LBS.append random salt) loops)]
+              createRandomStates pixels image salt
               dataLen <- readBytes pixels image 4
               let dataLen' = toInteger $ fromOctets $ LBS.unpack dataLen
               len <- randomElementsLength pixels
