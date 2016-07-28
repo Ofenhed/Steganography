@@ -1,6 +1,8 @@
-module ImageFileHandler (readBits, readBytes, writeBits, writeBytes) where
+{-# LANGUAGE FlexibleContexts #-}
+module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, readBits_, readBytes_, writeBits_, writeBytes_, getCryptoPrimitives) where
 
 import BitStringToRandom (getRandomElement, RndST, getRandomM)
+import PixelStream (Pixel)
 
 import Codec.Picture.Types
 import Control.Monad
@@ -8,18 +10,27 @@ import Control.Monad.Trans.Class
 import Data.Bits
 import qualified Data.BitString as BS
 
+data CryptoPrimitive = CryptoPrimitive (PixelStream.Pixel) (Bool)
+type CryptoStream = [CryptoPrimitive]
+
+getCryptoPrimitives pixels count = do
+  read <- forM [1..count] $ \_ -> do
+    pixel <- getRandomElement pixels
+    inv <- getRandomBoolM
+    return $ CryptoPrimitive pixel inv
+  return $ read
+
 getRandomBoolM :: RndST s Bool
 getRandomBoolM = do
   b <- getRandomM 1
   return $ case b of 1 -> True
                      0 -> False
 
-readBits pixels image bits = do
-  read <- forM [1..bits] $ \_ -> do
-    (x, y, c) <- getRandomElement pixels
+readBits_ primitives image = do
+  read <- forM primitives $ \p -> do
+    let CryptoPrimitive (x, y, c) inv = p
     let x' = fromInteger $ toInteger x
     let y' = fromInteger $ toInteger y
-    inv <- getRandomBoolM
     let (PixelRGBA8 red green blue alpha) = pixelAt image x' y'
     let p = case c of 0 -> red .&. 1
                       1 -> green .&. 1
@@ -28,17 +39,16 @@ readBits pixels image bits = do
                                  0 -> False
   return $ BS.fromList read
 
-readBytes pixels image bytes = do
-  bits <- readBits pixels image (bytes * 8)
+readBytes_ primitives image = do
+  bits <- readBits_ primitives image
   return $ BS.realizeBitStringLazy bits
 
-writeBits pixels image bits = forM_ (BS.toList bits) $ \bit -> do
-    (x, y, c) <- getRandomElement pixels
-    enc <- getRandomBoolM
+writeBits_ primitives image bits = forM_ (zipWith (\p b -> (p, b)) primitives (BS.toList bits)) $ \(p, bit) -> do
+    let CryptoPrimitive (x, y, c) inv = p
     let x' = fromInteger $ toInteger x
     let y' = fromInteger $ toInteger y
-    (PixelRGBA8 red green blue alpha) <- lift $ readPixel image x' y'
-    let newBit = case xor enc bit of True -> 1
+    (PixelRGBA8 red green blue alpha) <- readPixel image x' y'
+    let newBit = case xor inv bit of True -> 1
                                      False -> 0
     let red' = if c == 0 then (red .&. (complement 1)) .|. newBit
                          else red
@@ -46,7 +56,20 @@ writeBits pixels image bits = forM_ (BS.toList bits) $ \bit -> do
                            else green
     let blue' = if c == 2 then (blue .&. (complement 1)) .|. newBit
                           else blue
-    lift $ writePixel image x' y' $ PixelRGBA8 red' green' blue' alpha
+    writePixel image x' y' $ PixelRGBA8 red' green' blue' alpha
 
-writeBytes pixels image bytes = writeBits pixels image (BS.bitStringLazy bytes)
+writeBytes_ primitives image bytes = writeBits_ primitives image $ BS.bitStringLazy bytes
 
+readBits pixels image count = do
+  primitives <- getCryptoPrimitives pixels count
+  readBits_ primitives image
+
+readBytes pixels image count = do
+  a <- readBits pixels image $ count * 8
+  return $ BS.realizeBitStringLazy a
+
+writeBits pixels image bits = do
+  primitives <- getCryptoPrimitives pixels $ BS.length bits
+  lift $ writeBits_ primitives image bits
+
+writeBytes pixels image bytes = writeBits pixels image $ BS.bitStringLazy bytes
