@@ -85,13 +85,13 @@ readUntilHash pixels image = do
   hash <- readBytes pixels image (hashDigestSize SHA1)
   let Just digest = digestFromByteString $ LBS.toStrict hash
   let hash' = hashInit :: Context SHA1
-      writeUntilHashMatch h readData = if hashFinalize h == digest
-                                          then return $ LBS.pack $ reverse readData
-                                          else do
-                                            b <- readBytes pixels image 1
-                                            let newHash = hashUpdate h $ LBS.toStrict b
-                                            writeUntilHashMatch newHash (LBS.head b:readData)
-  writeUntilHashMatch hash' []
+      readUntilHashMatch h readData = if hashFinalize h == digest
+                                         then return $ LBS.pack $ reverse readData
+                                         else do
+                                           b <- readBytes pixels image 1
+                                           let newHash = hashUpdate h $ LBS.toStrict b
+                                           readUntilHashMatch newHash (LBS.head b:readData)
+  readUntilHashMatch hash' []
 
 doEncrypt imageFile secretFile loops inputFile salt = do
   a <- BS.readFile imageFile
