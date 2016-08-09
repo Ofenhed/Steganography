@@ -49,7 +49,9 @@ readSalt_ primitives image = do
     let p = case c of 0 -> red
                       1 -> green
                       2 -> blue
-    return $ p
+    return $ if inv
+                then complement p
+                else p
   return $ ByS.pack read
 
 writeBits_ primitives image bits = forM_ (zipWith (\p b -> (p, b)) primitives (BS.toList bits)) $ \(p, bit) -> do
