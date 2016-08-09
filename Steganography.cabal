@@ -1,5 +1,5 @@
 Name:           Steganography
-Version:        0.0.1
+Version:        0.0.2
 Author:         Marcus Ofenhed <marcus@conditionraise.se>
 Maintainer:     Marcus Ofenhed <marcus@conditionraise.se>
 License:        GPLv2
@@ -16,8 +16,8 @@ Executable Steganography
   Main-Is:           Steganography.hs
   Default-Language:  Haskell2010
   Build-Depends:     base>= 4 && <5,
-                     SHA,
                      bytestring,
+                     cryptonite,
                      binary,
                      JuicyPixels,
                      transformers,
@@ -26,7 +26,9 @@ Executable Steganography
                      Lazy-Pbkdf2,
                      array,
                      bitstring,
-                     console-program
+                     parallel,
+                     console-program,
+                     memory
                    
 
 Test-Suite ByteStreamToRandom

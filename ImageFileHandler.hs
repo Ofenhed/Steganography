@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
-module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, readBits_, readBytes_, writeBits_, writeBytes_, getCryptoPrimitives) where
+module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, readSalt_) where
 
 import BitStringToRandom (getRandomElement, RndST, getRandomM)
 import PixelStream (Pixel)
@@ -9,8 +9,9 @@ import Control.Monad
 import Control.Monad.Trans.Class
 import Data.Bits
 import qualified Data.BitString as BS
+import qualified Data.ByteString.Lazy as ByS
 
-data CryptoPrimitive = CryptoPrimitive (PixelStream.Pixel) (Bool)
+data CryptoPrimitive = CryptoPrimitive (PixelStream.Pixel) (Bool) deriving (Show)
 type CryptoStream = [CryptoPrimitive]
 
 getCryptoPrimitives pixels count = do
@@ -39,9 +40,17 @@ readBits_ primitives image = do
                                  0 -> False
   return $ BS.fromList read
 
-readBytes_ primitives image = do
-  bits <- readBits_ primitives image
-  return $ BS.realizeBitStringLazy bits
+readSalt_ primitives image = do
+  read <- forM primitives $ \p -> do
+    let CryptoPrimitive (x, y, c) inv = p
+    let x' = fromInteger $ toInteger x
+    let y' = fromInteger $ toInteger y
+    let (PixelRGBA8 red green blue alpha) = pixelAt image x' y'
+    let p = case c of 0 -> red
+                      1 -> green
+                      2 -> blue
+    return $ p
+  return $ ByS.pack read
 
 writeBits_ primitives image bits = forM_ (zipWith (\p b -> (p, b)) primitives (BS.toList bits)) $ \(p, bit) -> do
     let CryptoPrimitive (x, y, c) inv = p
@@ -58,7 +67,7 @@ writeBits_ primitives image bits = forM_ (zipWith (\p b -> (p, b)) primitives (B
                           else blue
     writePixel image x' y' $ PixelRGBA8 red' green' blue' alpha
 
-writeBytes_ primitives image bytes = writeBits_ primitives image $ BS.bitStringLazy bytes
+writeBytes_ primitives image bytes = lift $ writeBits_ primitives image $ BS.bitStringLazy bytes
 
 readBits pixels image count = do
   primitives <- getCryptoPrimitives pixels count
@@ -67,6 +76,10 @@ readBits pixels image count = do
 readBytes pixels image count = do
   a <- readBits pixels image $ count * 8
   return $ BS.realizeBitStringLazy a
+
+readSalt pixels image count = do
+  primitives <- getCryptoPrimitives pixels count
+  readSalt_ primitives image
 
 writeBits pixels image bits = do
   primitives <- getCryptoPrimitives pixels $ BS.length bits

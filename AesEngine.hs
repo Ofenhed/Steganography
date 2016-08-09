@@ -2,16 +2,19 @@ module AesEngine (createAes256RngState) where
 
 import BitStringToRandom (RndState)
 import Crypto.Cipher.AES
+import Crypto.Error (CryptoFailable(CryptoPassed))
+import Crypto.Cipher.Types
 import qualified Data.ByteString.Lazy as ByS
+import qualified Data.ByteString as BySS
 import qualified Data.BitString as BS
 
-createAes256RngState :: ByS.ByteString
+createAes256RngState :: BySS.ByteString
                         -- ^ @aesKey@
-                        -> ByS.ByteString
-                        -- ^ @aesIv@
                         -> RndState
-createAes256RngState aesKey aesIv = if (or [ByS.length aesKey /= 32, ByS.length aesIv /= 16]) then error "Faulty key data"
-                                                                                               else  [BS.bitStringLazy $ generateStream $ aesIV_ $ ByS.toStrict aesIv]
+createAes256RngState aesKey = if (BySS.length aesKey /= 32) then error "Faulty key data"
+                                                           else  [BS.bitStringLazy $ generateStream $ initialIv]
   where
-  aesKey' = initAES $ ByS.toStrict aesKey
-  generateStream iv = let (rand, newIv) = genCounter aesKey' iv 256 in ByS.append (ByS.fromStrict rand) (generateStream newIv)
+  CryptoPassed cipher = cipherInit aesKey :: CryptoFailable AES256
+  zeroes = BySS.pack $ replicate (blockSize cipher) 0
+  initialIv = nullIV :: IV AES256
+  generateStream iv = let rand = ctrCombine cipher iv zeroes in ByS.append (ByS.fromStrict rand) (generateStream $ ivAdd iv 1)

@@ -4,10 +4,11 @@ import BitStringToRandom
    runRndT, newRandomElementST, randomElementsLength, replaceSeedM, addSeedM, getRandomByteStringM
   )
 import PixelStream (getPixels)
-import ImageFileHandler (readBytes, writeBytes)
+import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives, readSalt)
 import AesEngine (createAes256RngState)
 
 import Crypto.Pbkdf2
+import Crypto.Hash
 
 import Data.Word (Word8, Word32)
 import System.Console.Command
@@ -24,9 +25,12 @@ import Data.Bits
 
 import qualified Data.BitString as BS
 import qualified Data.ByteString as BS
+import qualified Data.ByteArray as BA
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Char8 as C8
 import qualified System.Console.Argument as Argument
+
+import Debug.Trace
 
 cRed = 0 :: Word8
 cGreen = 1 :: Word8
@@ -56,14 +60,38 @@ fromOctets = Prelude.foldl accum 0
 
 toNum = fromInteger . toInteger
 
-createRandomStates pixels image salt = do
-  random <- readBytes pixels image 256
+createRandomStates pixels image@(Image width height _) salt = do
+  random <- readSalt pixels image $ quot (width*height) 10
   newPbkdfSecret <- getRandomByteStringM 256
+  aesSecret1 <- getRandomByteStringM 16
   replaceSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 newPbkdfSecret (LBS.append random salt) 5)]
-  aesSecret <- getRandomByteStringM 32
-  aesIv <- getRandomByteStringM 16
-  addSeedM (createAes256RngState aesSecret aesIv)
+  aesSecret2 <- getRandomByteStringM 16
+  addSeedM $ createAes256RngState $ LBS.toStrict $ LBS.append aesSecret1 aesSecret2
 
+writeAndHash pixels image input = do
+  hashPosition <- getCryptoPrimitives pixels (8 * (hashDigestSize SHA1))
+  let hash' = hashInit :: Context SHA1
+      writeAndHashRecursive input' h = if LBS.length input' == 0
+                                          then return $ hashFinalize h
+                                          else do
+                                            let byte = LBS.singleton $ LBS.head input'
+                                            writeBytes pixels image byte
+                                            let newHash = hashUpdate h $ LBS.toStrict byte
+                                            writeAndHashRecursive (LBS.tail input') newHash
+  h <- writeAndHashRecursive input hash'
+  writeBytes_ hashPosition image (LBS.pack $ BA.unpack h)
+
+readUntilHash pixels image = do
+  hash <- readBytes pixels image (hashDigestSize SHA1)
+  let Just digest = digestFromByteString $ LBS.toStrict hash
+  let hash' = hashInit :: Context SHA1
+      writeUntilHashMatch h readData = if hashFinalize h == digest
+                                          then return readData
+                                          else do
+                                            b <- readBytes pixels image 1
+                                            let newHash = hashUpdate h $ LBS.toStrict b
+                                            writeUntilHashMatch newHash (LBS.append readData b)
+  writeUntilHashMatch hash' LBS.empty
 
 doEncrypt imageFile secretFile loops inputFile salt = do
   a <- BS.readFile imageFile
@@ -75,12 +103,11 @@ doEncrypt imageFile secretFile loops inputFile salt = do
               createRandomStates pixels image salt
               mutable <- lift $ unsafeThawImage image
               let dataLen = toInteger $ LBS.length input
-              writeBytes pixels mutable (LBS.pack $ octets $ fromInteger $ dataLen)
               len <- randomElementsLength pixels
               let availLen = (quot (toInteger len) 8)
               if availLen < dataLen then error $ "The file doesn't fit in this image, the image can hold " ++ (show availLen) ++ " bytes maximum"
                                     else do
-                                      writeBytes pixels mutable input
+                                      writeAndHash pixels mutable input
                                       result <- lift $ unsafeFreezeImage mutable
                                       return result
   let newImage' = encodePngWithMetadata metadata newImage
@@ -94,13 +121,8 @@ doDecrypt imageFile secretFile loops output salt = do
   let (r,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ do
               pixels <- lift $ newRandomElementST $ getPixels (toNum w) (toNum h)
               createRandomStates pixels image salt
-              dataLen <- readBytes pixels image 4
-              let dataLen' = toInteger $ fromOctets $ LBS.unpack dataLen
-              len <- randomElementsLength pixels
-              if dataLen' > ((*) 8 $ toInteger len) then return Nothing
-                                                     else do
-                                                       hiddenData <- readBytes pixels image dataLen'
-                                                       return $ Just hiddenData
+              hiddenData <- readUntilHash pixels image
+              return $ Just hiddenData
   case r of Nothing -> putStrLn "No hidden data found"
             Just x -> LBS.writeFile output x
 
