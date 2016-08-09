@@ -1,5 +1,5 @@
 Name:           Steganography
-Version:        0.0.2
+Version:        0.0.3
 Author:         Marcus Ofenhed <marcus@conditionraise.se>
 Maintainer:     Marcus Ofenhed <marcus@conditionraise.se>
 License:        GPLv2
@@ -29,20 +29,6 @@ Executable Steganography
                      parallel,
                      console-program,
                      memory
-                   
-
-Test-Suite ByteStreamToRandom
-  Type:              exitcode-stdio-1.0
-  Main-Is:           BitStringToRandom-test.hs
-  Default-Language:  Haskell2010
-  Build-Depends:     base>= 4 && <5,
-                     bytestring,
-                     binary,
-                     transformers,
-                     mtl,
-                     vector,
-                     Lazy-Pbkdf2,
-                     bitstring
 
 Source-Repository head
   Type:       git

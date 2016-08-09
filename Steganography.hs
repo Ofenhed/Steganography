@@ -61,10 +61,10 @@ fromOctets = Prelude.foldl accum 0
 toNum = fromInteger . toInteger
 
 createRandomStates pixels image@(Image width height _) salt = do
-  random <- readSalt pixels image $ quot (width*height) 10
+  bigSalt <- readSalt pixels image $ quot (width*height) 10
   newPbkdfSecret <- getRandomByteStringM 256
   aesSecret1 <- getRandomByteStringM 16
-  replaceSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 newPbkdfSecret (LBS.append random salt) 5)]
+  replaceSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 newPbkdfSecret (LBS.append bigSalt salt) 5)]
   aesSecret2 <- getRandomByteStringM 16
   addSeedM $ createAes256RngState $ LBS.toStrict $ LBS.append aesSecret1 aesSecret2
 
