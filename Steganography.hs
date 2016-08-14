@@ -7,8 +7,13 @@ import PixelStream (getPixels)
 import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives, readSalt)
 import AesEngine (createAes256RngState)
 
+import Data.Maybe
 import Crypto.Pbkdf2
 import Crypto.Hash
+import Crypto.PubKey.RSA.Types (PrivateKey, private_size, Error(MessageTooLong), private_pub, public_size)
+import Crypto.Random.Entropy (getEntropy)
+import qualified Crypto.PubKey.RSA.OAEP as OAEP
+import qualified PemData (readPublicKey, readPrivateKey)
 
 import Data.Word (Word8, Word32)
 import System.Console.Command
@@ -60,6 +65,40 @@ fromOctets = Prelude.foldl accum 0
 
 toNum = fromInteger . toInteger
 
+oaepParams = OAEP.defaultOAEPParams SHA3_256
+
+readPrivateKey [] = return Nothing
+readPrivateKey filename = do
+  key <- PemData.readPrivateKey filename
+  return $ key
+
+createPublicKeyState filename = do
+  privateKey <- PemData.readPublicKey filename
+  if isNothing privateKey
+     then return Nothing
+     else do
+       let Just a = privateKey
+       seed <- getEntropy $ hashDigestSize $ OAEP.oaepHash oaepParams
+       secret <- getEntropy $ public_size a
+       return $ Just (BS.unpack seed, BS.unpack secret, a)
+
+addAdditionalPrivateRsaState Nothing _ _ = return ()
+addAdditionalPrivateRsaState (Just key) pixels image = do
+  encrypted <- readBytes pixels image $ private_size key
+  let Right decrypted = OAEP.decrypt Nothing oaepParams key (LBS.toStrict encrypted)
+  salt <- getRandomByteStringM 256
+  addSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 (C8.fromStrict decrypted) salt 5)]
+
+addAdditionalPublicRsaState Nothing _ _ = return ()
+addAdditionalPublicRsaState (Just (seed, secret, key)) pixels image = do
+  let encrypted = OAEP.encryptWithSeed (BS.pack seed) oaepParams key $ BS.pack secret
+  case encrypted of
+       Left MessageTooLong -> addAdditionalPublicRsaState (Just (seed, tail secret, key)) pixels image
+       Right b -> do
+         writeBytes pixels image $ LBS.fromStrict b
+         salt <- getRandomByteStringM 256
+         addSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 (LBS.pack secret) salt 5)]
+
 createRandomStates pixels image@(Image width height _) salt = do
   bigSalt <- readSalt pixels image $ quot (width*height) 10
   newPbkdfSecret <- getRandomByteStringM 256
@@ -93,15 +132,17 @@ readUntilHash pixels image = do
                                            readUntilHashMatch newHash (LBS.head b:readData)
   readUntilHashMatch hash' []
 
-doEncrypt imageFile secretFile loops inputFile salt = do
+doEncrypt imageFile secretFile loops inputFile salt pkiFile = do
   a <- BS.readFile imageFile
   secret <- LBS.readFile secretFile
   input <- LBS.readFile inputFile
+  publicKeyState <- createPublicKeyState pkiFile
   let Right (ImageRGBA8 image@(Image w h _), metadata) = decodePngWithMetadata a
   let (newImage,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ do
               pixels <- lift $ newRandomElementST $ getPixels (toNum w) (toNum h)
               createRandomStates pixels image salt
               mutable <- lift $ unsafeThawImage image
+              addAdditionalPublicRsaState publicKeyState pixels mutable
               let dataLen = toInteger $ LBS.length input
               len <- randomElementsLength pixels
               let availLen = (quot (toInteger len) 8)
@@ -114,13 +155,15 @@ doEncrypt imageFile secretFile loops inputFile salt = do
   if (LBS.length newImage') > 0 then LBS.writeFile imageFile $ encodePngWithMetadata metadata newImage
                                 else return ()
 
-doDecrypt imageFile secretFile loops output salt = do
+doDecrypt imageFile secretFile loops output salt pkiFile = do
   a <- BS.readFile imageFile
   secret <- LBS.readFile secretFile
+  privateKey <- readPrivateKey pkiFile
   let Right (ImageRGBA8 image@(Image w h _), metadata) = decodePngWithMetadata a
   let (r,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ do
               pixels <- lift $ newRandomElementST $ getPixels (toNum w) (toNum h)
               createRandomStates pixels image salt
+              addAdditionalPrivateRsaState privateKey pixels image
               hiddenData <- readUntilHash pixels image
               return $ Just hiddenData
   case r of Nothing -> putStrLn "No hidden data found"
@@ -132,17 +175,22 @@ encrypt = command "encrypt" "Encrypt and hide a file into a PNG file. Notice tha
             withNonOption (namedFile "SHARED-SECRET-FILE") $ \secret -> 
               withNonOption Argument.integer $ \loops ->
                 withNonOption (namedFile "INPUT-FILE") $ \file ->
-                  withOption saltOption $ \salt -> io $ doEncrypt image secret loops file (C8.pack salt)
+                  withOption saltOption $ \salt ->
+                    withOption pkiFileOption $ \pkiFile -> io $ doEncrypt image secret loops file (C8.pack salt) pkiFile
 
 decrypt = command "decrypt" "Get data from a PNG file. Both the SHARED-SECRET-FILE and INT has to be the same as when the file was encrypted. OUTPUT-FILE will be overwritten without warning." $
           withNonOption (namedFile "IMAGE-FILE") $ \image ->
             withNonOption (namedFile "SHARED-SECRET-FILE") $ \secret -> 
               withNonOption Argument.integer $ \loops ->
                 withNonOption (namedFile "OUTPUT-FILE") $ \file ->
-                  withOption saltOption $ \salt -> io $ doDecrypt image secret loops file (C8.pack salt)
+                  withOption saltOption $ \salt ->
+                    withOption pkiFileOption $ \pkiFile -> io $ doDecrypt image secret loops file (C8.pack salt) pkiFile
 
 namedFile :: String -> Argument.Type FilePath
 namedFile name = Argument.Type { Argument.name = name, Argument.parser = Right, Argument.defaultValue = Nothing }
+
+pkiFileOption :: Argument.Option String
+pkiFileOption = Argument.option ['p'] ["pki"] Argument.file "" "A PEM key to use for public key cryptography. Public key for encryption and private key for decryption."
 
 saltOption :: Argument.Option String
 saltOption = Argument.option ['s'] ["salt"] Argument.string "" "A salt to be applied to the encryption."
