@@ -51,7 +51,7 @@ This is done to assure that all user data is encrypted against an unique crypto 
 
 This can all be verified in the function `createRandomStates` in Steganography.hs.
 
-### RSA
+#### RSA
 After the Encryption/Decryption step, RSA can be used. This is done by adding a public key for encryption and private key for decryption. For encryption a big random secret `bigRandom` will be created from the system random source (so not pseudorandom coming from the program). This random will be encrypted using OEAP and write it to the image in the exact same way as data is usually written. Once it has been put in the image a new salt `salt` of 256 bytes is generated. At this point a new cryptostream, `hmacSha512Pbkdf2(bigRandom, salt, 5)`, is added to the entropy sources.
 
 On the receiving end it works pretty much the same, except `bigRandom` is read from the image and decrypted using the private key, after which the salt is created and they are both added to the new cryptostream in the same way.
@@ -66,8 +66,27 @@ Using the pixel stream, write a 40 byte SHA1 hash sum of the data to be encrypte
 #### Decryption
 Using the pixel stream, read out a 40 byte SHA1 hash sum from the image. Read out data byte by byte until the hash sum matches.
 
+#### Encrypted stream format
+The encrypted data is scattered around the image, but for simplicitys sake (to be able to verify security without relying on the shuffeling on data), the format is as follows:
+
+| Data | Encrypted by symmetric key | Required | Comment |
+| --- | :---: | :---: | --- |
+| RSA OAEP Encrypted Key | x | | A symmetric key encrypted with a public RSA key. |
+| Header | x | x | A single SHA1 hash sum of the form `SHA1(random(0..255)^256 || Enc(random, UserData))` |
+| Data  | x | x | `User data` |
+
+Worth noticing is that the SHA1 hash sum is done on a concatenation of a pseudo random 256 byte value and the user data encrypted with a seperate crypto key (fetched from the same pseudo random stream). This encryption of the user data is only used in this SHA1 sum and is then thrown away.
+
+As you see in the previous table, the header for symmetric encryption is 160 bits long and leaks no information about the user data.
+
+The header for public key encryption will be the key size of the RSA key + 160 bits and leaks no information about the user data, since the RSA encrypted symetric key adds to the encryption instead of replacing the encryption for the header and the data.
+
+As shown in the table, everything is encrypted with the symmetric key and there is no known data in the protocol (such as length fields or a boolean informing if there is a RSA encrypted key or not) which an attacker could try to use to gain more knowledge.
+
 ### Known weaknesses
 PBKDF2 is sensitive to SIMD brute force attacks, so in the future I will move away from it as my default PRNG.
+
+**Using public key cryptography introduces brute force weakness**. Since OAEP has a checksum of sorts anyone with the private RSA key (which should not be the attacker) can brute force the symmetric key without having to verify the header against the data for every single attempt. Since the heaviest workload should be done before the RSA key is added into the mix (by having a strong key or a large number of iterations) this shouldn't be a problem in reality.
 
 **The PNG images are sensitive to steganalysis**. I plan on reading up on which kinds of statistics are used for this kind of analysis and try to figure out if it's something I can compensate for.
 
