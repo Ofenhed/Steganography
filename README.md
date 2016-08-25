@@ -91,7 +91,7 @@ PBKDF2 is sensitive to SIMD brute force attacks, so in the future I will move aw
 **The PNG images are sensitive to steganalysis**. I plan on reading up on which kinds of statistics are used for this kind of analysis and try to figure out if it's something I can compensate for.
 
 ## Future thoughts
-I will add additional PRNG's. The ones that comes to mind now is AES256 and scrypt. The plan is to let multiple PRNG's generate bitstreams and xor them all together into a single PRNG stream.
+I will add additional PRNG's. The one that comes to mind now is scrypt.
 
 As this project is still in early development, I do not guarantee backwards or forwards compatibility between versions of this program.
 
