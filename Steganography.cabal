@@ -1,5 +1,5 @@
 Name:           Steganography
-Version:        0.0.4
+Version:        0.0.5
 Author:         Marcus Ofenhed <marcus@conditionraise.se>
 Maintainer:     Marcus Ofenhed <marcus@conditionraise.se>
 License:        GPLv2
@@ -17,6 +17,7 @@ Executable Steganography
   Default-Language:  Haskell2010
   Build-Depends:     base>= 4 && <5,
                      bytestring,
+                     primitive,
                      cryptonite,
                      binary,
                      JuicyPixels,

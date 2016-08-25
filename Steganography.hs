@@ -1,10 +1,11 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 import BitStringToRandom
   (
    runRndT, newRandomElementST, randomElementsLength, replaceSeedM, addSeedM, getRandomByteStringM
   )
-import PixelStream (getPixels)
-import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives, readSalt)
+import qualified PixelStream
+import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount)
 import AesEngine (createAes256RngState)
 
 import Data.Maybe
@@ -25,6 +26,7 @@ import System.Console.Program (single,showUsage)
 import Codec.Picture.Png
 import Codec.Picture.Types
 import Control.Monad.ST
+import Control.Monad
 import Control.Monad.Trans.Class
 import Data.Bits
 
@@ -34,12 +36,6 @@ import qualified Data.ByteArray as BA
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Char8 as C8
 import qualified System.Console.Argument as Argument
-
-import Debug.Trace
-
-cRed = 0 :: Word8
-cGreen = 1 :: Word8
-cBlue = 2 :: Word8
 
 myCommands :: Commands IO
 myCommands = Node
@@ -99,7 +95,9 @@ addAdditionalPublicRsaState (Just (seed, secret, key)) pixels image = do
          salt <- getRandomByteStringM 256
          addSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 (LBS.pack secret) salt 5)]
 
-createRandomStates pixels image@(Image width height _) salt = do
+createRandomStates pixels image salt = do
+  let width = pngDynamicMap imageWidth image
+      height = pngDynamicMap imageHeight image
   bigSalt <- readSalt pixels image $ quot (width*height) 10
   newPbkdfSecret <- getRandomByteStringM 256
   aesSecret1 <- getRandomByteStringM 16
@@ -137,34 +135,39 @@ doEncrypt imageFile secretFile loops inputFile salt pkiFile = do
   secret <- LBS.readFile secretFile
   input <- LBS.readFile inputFile
   publicKeyState <- createPublicKeyState pkiFile
-  let Right (ImageRGBA8 image@(Image w h _), metadata) = decodePngWithMetadata a
-  let (newImage,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ do
-              pixels <- lift $ newRandomElementST $ getPixels (toNum w) (toNum h)
-              createRandomStates pixels image salt
-              mutable <- lift $ unsafeThawImage image
-              addAdditionalPublicRsaState publicKeyState pixels mutable
-              let dataLen = toInteger $ LBS.length input
-              len <- randomElementsLength pixels
-              let availLen = (quot (toInteger len) 8)
-              if availLen < dataLen then error $ "The file doesn't fit in this image, the image can hold " ++ (show availLen) ++ " bytes maximum"
-                                    else do
-                                      writeAndHash pixels mutable input
-                                      result <- lift $ unsafeFreezeImage mutable
-                                      return result
-  let newImage' = encodePngWithMetadata metadata newImage
-  if (LBS.length newImage') > 0 then LBS.writeFile imageFile $ encodePngWithMetadata metadata newImage
-                                else return ()
+  let Right (dynamicImage, metadata) = decodePngWithMetadata a
+      (newImage,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ pngDynamicMap (\img -> unsafeThawImage img >>= runFunc input publicKeyState (dynamicImage, metadata)) dynamicImage
+  when (newImage /= LBS.empty) $ LBS.writeFile imageFile newImage
+    where
+    runFunc input publicKeyState (dynamicImage, metadatas) mutableImage = do
+      let w = dynamicMap imageWidth dynamicImage
+          h = dynamicMap imageHeight dynamicImage
+      pixels <- lift $ newRandomElementST $ PixelStream.getPixels (toNum w) (toNum h) $ (fromIntegral $ pngDynamicComponentCount dynamicImage :: Word8)
+      createRandomStates pixels dynamicImage salt
+      addAdditionalPublicRsaState publicKeyState pixels mutableImage
+      let dataLen = toInteger $ LBS.length input
+      writeAndHash pixels mutableImage input
+      len <- randomElementsLength pixels
+      let availLen = (quot (toInteger len) 8)
+      return $ LBS.pack [1, 2, 3, fromInteger dataLen, fromIntegral w, fromIntegral h]
+      if availLen < dataLen then error $ "The file doesn't fit in this image, the image can hold " ++ (show availLen) ++ " bytes maximum"
+                            else do
+                              writeAndHash pixels mutableImage input
+                              result <- unsafeFreezeImage mutableImage
+                              return $ encodePngWithMetadata metadatas result
 
 doDecrypt imageFile secretFile loops output salt pkiFile = do
   a <- BS.readFile imageFile
   secret <- LBS.readFile secretFile
   privateKey <- readPrivateKey pkiFile
-  let Right (ImageRGBA8 image@(Image w h _), metadata) = decodePngWithMetadata a
-  let (r,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ do
-              pixels <- lift $ newRandomElementST $ getPixels (toNum w) (toNum h)
-              createRandomStates pixels image salt
-              addAdditionalPrivateRsaState privateKey pixels image
-              hiddenData <- readUntilHash pixels image
+  let Right (dynamicImage, metadata) = decodePngWithMetadata a
+      w = dynamicMap imageWidth dynamicImage
+      h = dynamicMap imageHeight dynamicImage
+      (r,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ do
+              pixels <- lift $ newRandomElementST $ PixelStream.getPixels (toNum w) (toNum h) $ (fromIntegral $ pngDynamicComponentCount dynamicImage :: Word8)
+              createRandomStates pixels dynamicImage salt
+              addAdditionalPrivateRsaState privateKey pixels dynamicImage
+              hiddenData <- readUntilHash pixels dynamicImage
               return $ Just hiddenData
   case r of Nothing -> putStrLn "No hidden data found"
             Just x -> LBS.writeFile output x

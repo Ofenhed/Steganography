@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module BitStringToRandom (RndT, RndST, RndIO, Rnd, RndState, getRandomM, getRandom2M, runRndT, newRandomElementST, getRandomElement, randomElementsLength, replaceSeedM, addSeedM, getRandomByteStringM) where
 
@@ -9,6 +10,7 @@ import Control.Monad.Trans.Class
 import Control.Monad.ST
 import Control.Monad.Identity
 import Data.STRef
+import Control.Monad.Primitive
 import Control.Parallel.Strategies
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as VM
@@ -92,6 +94,10 @@ newtype RndT m a = RndT
   { unRndT :: StateT RndState m a }
   deriving (Functor, Applicative, Monad, MonadTrans)
 
+instance PrimMonad m => PrimMonad (RndT m) where
+  type PrimState (RndT m) = PrimState m
+  primitive = lift . primitive
+  {-# INLINE primitive #-}
 
 type RndST s a = RndT (ST s) a
 type RndIO a = RndT IO a

@@ -1,13 +1,17 @@
 {-# LANGUAGE FlexibleContexts #-}
-module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, readSalt_) where
+{-# LANGUAGE Rank2Types #-}
+
+module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, readSalt_, pngDynamicMap, pngDynamicComponentCount) where
 
 import BitStringToRandom (getRandomElement, RndST, getRandomM)
 import PixelStream (Pixel)
 
+import Codec.Picture.Png
 import Codec.Picture.Types
 import Control.Monad
 import Control.Monad.Trans.Class
 import Data.Bits
+import Data.Word (Word8)
 import qualified Data.BitString as BS
 import qualified Data.ByteString.Lazy as ByS
 
@@ -27,53 +31,76 @@ getRandomBoolM = do
   return $ case b of 1 -> True
                      0 -> False
 
-readBits_ primitives image = do
-  read <- forM primitives $ \p -> do
-    let CryptoPrimitive (x, y, c) inv = p
-    let x' = fromInteger $ toInteger x
-    let y' = fromInteger $ toInteger y
-    let (PixelRGBA8 red green blue alpha) = pixelAt image x' y'
-    let p = case c of 0 -> red .&. 1
-                      1 -> green .&. 1
-                      2 -> blue .&. 1
-    return $ xor inv $ case p of 1 -> True
-                                 0 -> False
-  return $ BS.fromList read
+getColorAt :: DynamicImage -> Int -> Int -> Int -> Pixel8
+getColorAt (ImageY8 i) x y c = let g = pixelAt i x y in [g] !! c
+getColorAt (ImageY16 i) x y c = let g = pixelAt i x y in (fromIntegral $ [g] !! c) :: Word8
+getColorAt (ImageYA8 i) x y c = let PixelYA8 g _ = pixelAt i x y in [g] !! c
+getColorAt (ImageYA16 i) x y c = let PixelYA16 g _ = pixelAt i x y in (fromIntegral $ [g] !! c) :: Word8
+getColorAt (ImageRGB8 i) x y c = let PixelRGB8 r g b = pixelAt i x y in [r, g, b] !! c
+getColorAt (ImageRGB16 i) x y c = let PixelRGB16 r g b = pixelAt i x y in (fromIntegral $ [r, g, b] !! c) :: Word8
+getColorAt (ImageRGBA8 i) x y c = let PixelRGBA8 r g b _ = pixelAt i x y in [r, g, b] !! c
+getColorAt (ImageRGBA16 i) x y c = let PixelRGBA16 r g b _ = pixelAt i x y in (fromIntegral $ [r, g, b] !! c) :: Word8
 
-readSalt_ primitives image = do
-  read <- forM primitives $ \p -> do
+pngDynamicMap :: (forall pixel . (Codec.Picture.Types.Pixel pixel, PngSavable pixel, Bits (PixelBaseComponent pixel)) => Image pixel -> a)
+              -> DynamicImage -> a
+pngDynamicMap f (ImageY8    i) = f i
+pngDynamicMap f (ImageY16   i) = f i
+pngDynamicMap f (ImageYA8   i) = f i
+pngDynamicMap f (ImageYA16  i) = f i
+pngDynamicMap f (ImageRGB8  i) = f i
+pngDynamicMap f (ImageRGB16 i) = f i
+pngDynamicMap f (ImageRGBA8 i) = f i
+pngDynamicMap f (ImageRGBA16 i) = f i
+
+pngDynamicComponentCount  :: DynamicImage -> Int
+pngDynamicComponentCount (ImageYA8   i) = ((componentCount . \x -> pixelAt x 0 0) i) - 1
+pngDynamicComponentCount (ImageYA16  i) = ((componentCount . \x -> pixelAt x 0 0) i) - 1
+pngDynamicComponentCount (ImageRGBA8 i) = ((componentCount . \x -> pixelAt x 0 0) i) - 1
+pngDynamicComponentCount (ImageRGBA16 i) = ((componentCount . \x -> pixelAt x 0 0) i) - 1
+pngDynamicComponentCount x = pngDynamicMap (componentCount . \x -> pixelAt x 0 0) x
+
+readBits_ primitives image = BS.fromList $ read primitives
+  where
+  read = map $ \p ->
     let CryptoPrimitive (x, y, c) inv = p
-    let x' = fromInteger $ toInteger x
-    let y' = fromInteger $ toInteger y
-    let (PixelRGBA8 red green blue alpha) = pixelAt image x' y'
-    let p = case c of 0 -> red
-                      1 -> green
-                      2 -> blue
-    return $ if inv
-                then complement p
-                else p
-  return $ ByS.pack read
+        x' = fromIntegral x
+        y' = fromIntegral y
+        c' = fromIntegral c
+        result = (getColorAt image x' y' c') .&. 1
+    in xor inv $ case result of
+                      1 -> True
+                      0 -> False
+
+readSalt_ primitives image = ByS.pack $ read primitives
+  where
+  read = map $ \p ->
+    let CryptoPrimitive (x, y, c) inv = p
+        x' = fromIntegral x
+        y' = fromIntegral y
+        c' = fromIntegral c
+        result = getColorAt image x' y' c'
+    in if inv
+          then complement result
+          else result
 
 writeBits_ primitives image bits = forM_ (zipWith (\p b -> (p, b)) primitives (BS.toList bits)) $ \(p, bit) -> do
     let CryptoPrimitive (x, y, c) inv = p
-    let x' = fromInteger $ toInteger x
-    let y' = fromInteger $ toInteger y
-    (PixelRGBA8 red green blue alpha) <- readPixel image x' y'
-    let newBit = case xor inv bit of True -> 1
+        x' = fromIntegral x
+        y' = fromIntegral y
+        newBit = case xor inv bit of True -> 1
                                      False -> 0
-    let red' = if c == 0 then (red .&. (complement 1)) .|. newBit
-                         else red
-    let green' = if c == 1 then (green .&. (complement 1)) .|. newBit
-                           else green
-    let blue' = if c == 2 then (blue .&. (complement 1)) .|. newBit
-                          else blue
-    writePixel image x' y' $ PixelRGBA8 red' green' blue' alpha
+    pixel <- readPixel image x' y'
+    let pixel' = mixWith (\color value _ ->
+          if color == fromIntegral c
+             then (value .&. (complement 1)) .|. newBit
+             else value) pixel pixel
+    writePixel image x' y' pixel'
 
 writeBytes_ primitives image bytes = lift $ writeBits_ primitives image $ BS.bitStringLazy bytes
 
 readBits pixels image count = do
   primitives <- getCryptoPrimitives pixels count
-  readBits_ primitives image
+  return $ readBits_ primitives image
 
 readBytes pixels image count = do
   a <- readBits pixels image $ count * 8
@@ -81,7 +108,7 @@ readBytes pixels image count = do
 
 readSalt pixels image count = do
   primitives <- getCryptoPrimitives pixels count
-  readSalt_ primitives image
+  return $ readSalt_ primitives image
 
 writeBits pixels image bits = do
   primitives <- getCryptoPrimitives pixels $ BS.length bits
