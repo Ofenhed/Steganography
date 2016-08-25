@@ -109,14 +109,14 @@ As you see in the previous table, the header for symmetric encryption is 160 bit
 
 The header for public key encryption will be the key size of the RSA key + 160 bits and leaks no information about the user data, since the RSA encrypted symetric key adds to the encryption instead of replacing the encryption for the header and the data.
 
-As shown in the table, everything is encrypted with the symmetric key and there is no known data in the protocol (such as length fields or a boolean informing if there is a RSA encrypted key or not) which an attacker could try to use to gain more knowledge.
+As shown in the table, everything is encrypted with the symmetric key and there is no known data in the protocol (such as length fields or a boolean informing if there is a RSA encrypted key or not) which an attacker could try to use to gain more knowledge. Notice also that unlike this table there is no end of the User Data until every single pixel in the image has been used up, so without the encryption key it is not possible to know the exact length of the user data. An attack where the attacker is able to decrypt the data could ofcourse allow the attacker to guess the length based on the data it decrypts, but actually decrypting the data would require the attacker to hold the key mass which would also unlock the SHA1 MAC, so it's not viable to decrypt the data without being able to verify the data against the SHA1 MAC. Notice that it may be possible for the attacker could get a pretty good approximation of the length of the hidden data anyways, see Known weaknesses.
 
 ### Known weaknesses
 PBKDF2 is sensitive to SIMD brute force attacks, so in the future I will move away from it as my default PRNG.
 
 **Using public key cryptography introduces brute force weakness**. Since OAEP has a checksum of sorts anyone with the private RSA key (which should not be the attacker) can brute force the symmetric key without having to verify the header against the data for every single attempt. Since the heaviest workload should be done before the RSA key is added into the mix (by having a strong key or a large number of iterations) this shouldn't be a problem in reality.
 
-**The PNG images are sensitive to steganalysis**. I plan on reading up on which kinds of statistics are used for this kind of analysis and try to figure out if it's something I can compensate for.
+**The PNG images are sensitive to steganalysis**. By using statistics based on for examle camera type an attacker can compare the image against a list of known artifacts that should exist. When these doesn't exist an attacker can draw the conclusion that they don't exist because the image has been tampered with, for example by hiding data. Since every written byte has a 50% chance of changing a pixel in the image steganalysis can also be used to figure out approximately how much data is hidden in the image. The less data you hide the smaller the chance of detection.
 
 ## Future thoughts
 I will add additional PRNG's. The one that comes to mind now is scrypt.
