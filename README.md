@@ -61,10 +61,10 @@ Note that when you encrypt using a 2048 bit RSA key, the result will be 2048 bit
 If the private RSA keys are kept safe then it would be safe to only use the RSA encryption and let the symmetric encryption be known. A specific use case for this would be used to share symmetric keys in a group, to allow for broadcast messages while using RSA encryption for specific receivers. Notice: The messages aren't signed, so a receiver would not be able to verify the source of the encrypted message unless they are signed before they are encrypted with this program.
 
 #### Encryption
-Using the pixel stream, write a 40 byte SHA1 hash sum of the data to be encrypted, and append the data. All data using the pixel stream is subject to the invertBit variable in the pixel stream, so both the SHA1 sum and the data is now encrypted.
+Using the pixel stream, write a 20 byte SHA1 hash sum of the data to be encrypted, and append the data. All data using the pixel stream is subject to the invertBit variable in the pixel stream, so both the SHA1 sum and the data is now encrypted.
 
 #### Decryption
-Using the pixel stream, read out a 40 byte SHA1 hash sum from the image. Read out data byte by byte until the hash sum matches.
+Using the pixel stream, read out a 20 byte SHA1 hash sum from the image. Read out data byte by byte until the hash sum matches.
 
 #### Encrypted stream format
 The encrypted data is scattered around the image, but for simplicitys sake (to be able to verify security without relying on the shuffeling on data), the format is as follows:
