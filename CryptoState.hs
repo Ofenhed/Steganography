@@ -3,18 +3,17 @@
 module CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivateRsaState, addAdditionalPublicRsaState, createRandomStates) where
 
 import AesEngine (createAes256RngState)
-import BitStringToRandom (runRndT, newRandomElementST, randomElementsLength, replaceSeedM, addSeedM, getRandomByteStringM)
+import BitStringToRandom (replaceSeedM, addSeedM, getRandomByteStringM)
 import Codec.Picture.Types (imageWidth, imageHeight)
 import Crypto.Hash (SHA3_256(..), hashDigestSize)
 import Crypto.Pbkdf2 (hmacSha512Pbkdf2)
-import Crypto.PubKey.RSA.Types (PrivateKey, private_size, Error(MessageTooLong), private_pub, public_size)
+import Crypto.PubKey.RSA.Types (private_size, Error(MessageTooLong), public_size)
 import Crypto.Random.Entropy (getEntropy)
 import Data.Maybe (isNothing)
 import ImageFileHandler (readBytes, writeBytes, readSalt, pngDynamicMap)
 
 import qualified Crypto.PubKey.RSA.OAEP as OAEP
 import qualified Data.BitString as BS
-import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Char8 as C8
