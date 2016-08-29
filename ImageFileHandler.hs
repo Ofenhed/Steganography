@@ -4,14 +4,14 @@
 module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, readSalt_, pngDynamicMap, pngDynamicComponentCount) where
 
 import BitStringToRandom (getRandomElement, RndST, getRandomM)
+import Codec.Picture.Png (PngSavable)
+import Control.Monad (forM, forM_)
+import Control.Monad.Trans.Class (lift)
+import Data.Bits (Bits, xor, shift, (.&.), complement, (.|.))
+import Data.Word (Word8)
 import PixelStream (Pixel)
 
-import Codec.Picture.Png
-import Codec.Picture.Types
-import Control.Monad
-import Control.Monad.Trans.Class
-import Data.Bits
-import Data.Word (Word8)
+import qualified Codec.Picture.Types as I
 import qualified Data.BitString as BS
 import qualified Data.ByteString.Lazy as ByS
 
@@ -31,35 +31,35 @@ getRandomBoolM = do
   return $ case b of 1 -> True
                      0 -> False
 
-getColorAt :: DynamicImage -> Int -> Int -> Int -> Pixel16
-getColorAt (ImageY8 i) x y c = let g = pixelAt i x y in fromIntegral $ [g] !! c
-getColorAt (ImageY16 i) x y c = let g = pixelAt i x y in [g] !! c
-getColorAt (ImageYA8 i) x y c = let PixelYA8 g _ = pixelAt i x y in fromIntegral $ [g] !! c
-getColorAt (ImageYA16 i) x y c = let PixelYA16 g _ = pixelAt i x y in [g] !! c
-getColorAt (ImageRGB8 i) x y c = let PixelRGB8 r g b = pixelAt i x y in fromIntegral $ [r, g, b] !! c
-getColorAt (ImageRGB16 i) x y c = let PixelRGB16 r g b = pixelAt i x y in [r, g, b] !! c
-getColorAt (ImageRGBA8 i) x y c = let PixelRGBA8 r g b _ = pixelAt i x y in fromIntegral $ [r, g, b] !! c
-getColorAt (ImageRGBA16 i) x y c = let PixelRGBA16 r g b _ = pixelAt i x y in [r, g, b] !! c
+getColorAt :: I.DynamicImage -> Int -> Int -> Int -> I.Pixel16
+getColorAt (I.ImageY8 i) x y c = let g = I.pixelAt i x y in fromIntegral $ [g] !! c
+getColorAt (I.ImageY16 i) x y c = let g = I.pixelAt i x y in [g] !! c
+getColorAt (I.ImageYA8 i) x y c = let I.PixelYA8 g _ = I.pixelAt i x y in fromIntegral $ [g] !! c
+getColorAt (I.ImageYA16 i) x y c = let I.PixelYA16 g _ = I.pixelAt i x y in [g] !! c
+getColorAt (I.ImageRGB8 i) x y c = let I.PixelRGB8 r g b = I.pixelAt i x y in fromIntegral $ [r, g, b] !! c
+getColorAt (I.ImageRGB16 i) x y c = let I.PixelRGB16 r g b = I.pixelAt i x y in [r, g, b] !! c
+getColorAt (I.ImageRGBA8 i) x y c = let I.PixelRGBA8 r g b _ = I.pixelAt i x y in fromIntegral $ [r, g, b] !! c
+getColorAt (I.ImageRGBA16 i) x y c = let I.PixelRGBA16 r g b _ = I.pixelAt i x y in [r, g, b] !! c
 getColorAt _ _ _ _ = error "Unsupported image format"
 
-pngDynamicMap :: (forall pixel . (Codec.Picture.Types.Pixel pixel, PngSavable pixel, Bits (PixelBaseComponent pixel)) => Image pixel -> a)
-              -> DynamicImage -> a
-pngDynamicMap f (ImageY8    i) = f i
-pngDynamicMap f (ImageY16   i) = f i
-pngDynamicMap f (ImageYA8   i) = f i
-pngDynamicMap f (ImageYA16  i) = f i
-pngDynamicMap f (ImageRGB8  i) = f i
-pngDynamicMap f (ImageRGB16 i) = f i
-pngDynamicMap f (ImageRGBA8 i) = f i
-pngDynamicMap f (ImageRGBA16 i) = f i
+pngDynamicMap :: (forall pixel . (I.Pixel pixel, PngSavable pixel, Bits (I.PixelBaseComponent pixel)) => I.Image pixel -> a)
+              -> I.DynamicImage -> a
+pngDynamicMap f (I.ImageY8    i) = f i
+pngDynamicMap f (I.ImageY16   i) = f i
+pngDynamicMap f (I.ImageYA8   i) = f i
+pngDynamicMap f (I.ImageYA16  i) = f i
+pngDynamicMap f (I.ImageRGB8  i) = f i
+pngDynamicMap f (I.ImageRGB16 i) = f i
+pngDynamicMap f (I.ImageRGBA8 i) = f i
+pngDynamicMap f (I.ImageRGBA16 i) = f i
 pngDynamicMap _ _ = error "Unsupported image format"
 
-pngDynamicComponentCount  :: DynamicImage -> Int
-pngDynamicComponentCount (ImageYA8   i) = ((componentCount . \x -> pixelAt x 0 0) i) - 1
-pngDynamicComponentCount (ImageYA16  i) = ((componentCount . \x -> pixelAt x 0 0) i) - 1
-pngDynamicComponentCount (ImageRGBA8 i) = ((componentCount . \x -> pixelAt x 0 0) i) - 1
-pngDynamicComponentCount (ImageRGBA16 i) = ((componentCount . \x -> pixelAt x 0 0) i) - 1
-pngDynamicComponentCount x = pngDynamicMap (componentCount . \x -> pixelAt x 0 0) x
+pngDynamicComponentCount  :: I.DynamicImage -> Int
+pngDynamicComponentCount (I.ImageYA8   i) = ((I.componentCount . \x -> I.pixelAt x 0 0) i) - 1
+pngDynamicComponentCount (I.ImageYA16  i) = ((I.componentCount . \x -> I.pixelAt x 0 0) i) - 1
+pngDynamicComponentCount (I.ImageRGBA8 i) = ((I.componentCount . \x -> I.pixelAt x 0 0) i) - 1
+pngDynamicComponentCount (I.ImageRGBA16 i) = ((I.componentCount . \x -> I.pixelAt x 0 0) i) - 1
+pngDynamicComponentCount x = pngDynamicMap (I.componentCount . \x -> I.pixelAt x 0 0) x
 
 readBits_ primitives image = BS.fromList $ read primitives
   where
@@ -96,12 +96,12 @@ writeBits_ primitives image bits = forM_ (zipWith (\p b -> (p, b)) primitives (B
         y' = fromIntegral y
         newBit = case xor inv bit of True -> 1
                                      False -> 0
-    pixel <- readPixel image x' y'
-    let pixel' = mixWith (\color value _ ->
+    pixel <- I.readPixel image x' y'
+    let pixel' = I.mixWith (\color value _ ->
           if color == fromIntegral c
              then (value .&. (complement 1)) .|. newBit
              else value) pixel pixel
-    writePixel image x' y' pixel'
+    I.writePixel image x' y' pixel'
 
 writeBytes_ primitives image bytes = lift $ writeBits_ primitives image $ BS.bitStringLazy bytes
 

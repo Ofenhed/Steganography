@@ -4,18 +4,19 @@
 
 module BitStringToRandom (RndT, RndST, RndIO, Rnd, RndState, getRandomM, getRandom2M, runRndT, newRandomElementST, getRandomElement, randomElementsLength, replaceSeedM, addSeedM, getRandomByteStringM) where
 
-import Data.Bits
-import Control.Monad.Trans.State.Lazy
-import Control.Monad.Trans.Class
-import Control.Monad.ST
-import Control.Monad.Identity
-import Data.STRef
-import Control.Monad.Primitive
-import Control.Parallel.Strategies
-import qualified Data.Vector.Unboxed as V
-import qualified Data.Vector.Unboxed.Mutable as VM
+import Control.Monad.Identity (Identity)
+import Control.Monad.Primitive (PrimMonad, PrimState, primitive)
+import Control.Monad.ST (ST)
+import Control.Monad.Trans.Class (MonadTrans, lift)
+import Control.Monad.Trans.State.Lazy (StateT, put, state, runStateT)
+import Control.Parallel.Strategies (parMap, rpar, using, rseq)
+import Data.Bits (shiftL, (.|.), xor)
+import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
+
 import qualified Data.BitString as BS
 import qualified Data.ByteString.Lazy as ByS
+import qualified Data.Vector.Unboxed as V
+import qualified Data.Vector.Unboxed.Mutable as VM
 
 bitsNeeded :: Integer -> Integer
 bitsNeeded x = (+) 1 $ floor $ logBase 2 (fromIntegral x)

@@ -1,33 +1,26 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
-import BitStringToRandom (runRndT, newRandomElementST, randomElementsLength, getRandomByteStringM)
-import qualified PixelStream
-import HashedData (readUntilHash, writeAndHash)
-import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives, pngDynamicMap, pngDynamicComponentCount)
+
+import BitStringToRandom (runRndT, newRandomElementST, randomElementsLength)
+import Codec.Picture.Png (decodePngWithMetadata, encodePngWithMetadata)
+import Codec.Picture.Types (dynamicMap, imageHeight, imageWidth, unsafeThawImage, unsafeFreezeImage)
+import Control.Monad.ST (runST)
+import Control.Monad.Trans.Class (lift)
+import Control.Monad (when)
+import Crypto.Pbkdf2 (hmacSha512Pbkdf2)
 import CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivateRsaState, addAdditionalPublicRsaState, createRandomStates)
-
-import Crypto.Pbkdf2
-import Crypto.Hash
-
+import Data.Bits (shiftR, shiftL, (.|.))
 import Data.Word (Word8, Word32)
-import System.Console.Command
-  (
-   Commands,Tree(Node),Command,command,withOption,withNonOption,io
-  )
+import HashedData (readUntilHash, writeAndHash)
+import ImageFileHandler (pngDynamicMap, pngDynamicComponentCount)
+import System.Console.Command (Commands,Tree(Node),Command,command,withOption,withNonOption,io)
 import System.Console.Program (single,showUsage)
-
-import Codec.Picture.Png
-import Codec.Picture.Types
-import Control.Monad.ST
-import Control.Monad
-import Control.Monad.Trans.Class
-import Data.Bits
 
 import qualified Data.BitString as BS
 import qualified Data.ByteString as BS
-import qualified Data.ByteArray as BA
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.Char8 as C8
+import qualified PixelStream
 import qualified System.Console.Argument as Argument
 
 myCommands :: Commands IO

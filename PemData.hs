@@ -1,15 +1,15 @@
 module PemData (readPublicKey, readPrivateKey) where
 
+import Data.ASN1.BinaryEncoding (BER(..))
+import Data.ASN1.Encoding (decodeASN1')
+import Data.ASN1.Types (ASN1)
+import Data.ASN1.Types (fromASN1)
+import Data.PEM (pemParseLBS, pemContent)
 import Data.X509.File (readKeyFile)
 import Data.X509 (PrivKey(PrivKeyRSA))
 import Data.X509 (PubKey(PubKeyRSA))
-import Data.PEM (pemParseLBS, pemContent, pemName)
-import qualified Data.ByteString.Lazy.Char8 as C8
-import Data.ASN1.Encoding (decodeASN1')
-import Data.ASN1.Types (ASN1)
-import Data.ASN1.BinaryEncoding (BER(..))
-import Data.ASN1.Types (fromASN1)
 
+import qualified Data.ByteString.Lazy.Char8 as C8
 
 readPrivateKey file = do
   keys <- readKeyFile file
