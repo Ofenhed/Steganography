@@ -157,7 +157,6 @@ doEncrypt imageFile secretFile loops inputFile salt pkiFile = do
       writeAndHash pixels mutableImage input
       len <- randomElementsLength pixels
       let availLen = (quot (toInteger len) 8)
-      return $ LBS.pack [1, 2, 3, fromInteger dataLen, fromIntegral w, fromIntegral h]
       if availLen < dataLen then error $ "The file doesn't fit in this image, the image can hold " ++ (show availLen) ++ " bytes maximum"
                             else do
                               writeAndHash pixels mutableImage input
