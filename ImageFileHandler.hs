@@ -40,6 +40,7 @@ getColorAt (ImageRGB8 i) x y c = let PixelRGB8 r g b = pixelAt i x y in fromInte
 getColorAt (ImageRGB16 i) x y c = let PixelRGB16 r g b = pixelAt i x y in [r, g, b] !! c
 getColorAt (ImageRGBA8 i) x y c = let PixelRGBA8 r g b _ = pixelAt i x y in fromIntegral $ [r, g, b] !! c
 getColorAt (ImageRGBA16 i) x y c = let PixelRGBA16 r g b _ = pixelAt i x y in [r, g, b] !! c
+getColorAt _ _ _ _ = error "Unsupported image format"
 
 pngDynamicMap :: (forall pixel . (Codec.Picture.Types.Pixel pixel, PngSavable pixel, Bits (PixelBaseComponent pixel)) => Image pixel -> a)
               -> DynamicImage -> a
@@ -51,6 +52,7 @@ pngDynamicMap f (ImageRGB8  i) = f i
 pngDynamicMap f (ImageRGB16 i) = f i
 pngDynamicMap f (ImageRGBA8 i) = f i
 pngDynamicMap f (ImageRGBA16 i) = f i
+pngDynamicMap _ _ = error "Unsupported image format"
 
 pngDynamicComponentCount  :: DynamicImage -> Int
 pngDynamicComponentCount (ImageYA8   i) = ((componentCount . \x -> pixelAt x 0 0) i) - 1

@@ -31,7 +31,7 @@ multipleBitstringsSplitAt i x = join' (split' x) [] []
  join' [] takers droppers = (takers, droppers)
  join' (x:xs) takers droppers = let (newTake, newDrop) = x in join' xs (newTake:takers) (newDrop:droppers)
 
-multipleBitstringsAssertLength len [] = False
+multipleBitstringsAssertLength _ [] = False
 multipleBitstringsAssertLength len x = len' x
   where
   len' [] = True

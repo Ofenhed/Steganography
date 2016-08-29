@@ -3,7 +3,7 @@ module PemData (readPublicKey, readPrivateKey) where
 import Data.X509.File (readKeyFile)
 import Data.X509 (PrivKey(PrivKeyRSA))
 import Data.X509 (PubKey(PubKeyRSA))
-import Data.PEM (pemParseLBS, pemContent, pemName, PEM)
+import Data.PEM (pemParseLBS, pemContent, pemName)
 import qualified Data.ByteString.Lazy.Char8 as C8
 import Data.ASN1.Encoding (decodeASN1')
 import Data.ASN1.Types (ASN1)
