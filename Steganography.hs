@@ -1,20 +1,12 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
-import BitStringToRandom
-  (
-   runRndT, newRandomElementST, randomElementsLength, replaceSeedM, addSeedM, getRandomByteStringM
-  )
+import BitStringToRandom (runRndT, newRandomElementST, randomElementsLength, getRandomByteStringM)
 import qualified PixelStream
-import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount)
-import AesEngine (createAes256RngState)
+import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives, pngDynamicMap, pngDynamicComponentCount)
+import CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivateRsaState, addAdditionalPublicRsaState, createRandomStates)
 
-import Data.Maybe
 import Crypto.Pbkdf2
 import Crypto.Hash
-import Crypto.PubKey.RSA.Types (PrivateKey, private_size, Error(MessageTooLong), private_pub, public_size)
-import Crypto.Random.Entropy (getEntropy)
-import qualified Crypto.PubKey.RSA.OAEP as OAEP
-import qualified PemData (readPublicKey, readPrivateKey)
 
 import Data.Word (Word8, Word32)
 import System.Console.Command
@@ -60,50 +52,6 @@ fromOctets = Prelude.foldl accum 0
     accum a o = (a `shiftL` 8) .|. fromIntegral o
 
 toNum = fromInteger . toInteger
-
-oaepParams = OAEP.defaultOAEPParams SHA3_256
-
-readPrivateKey [] = return Nothing
-readPrivateKey filename = do
-  key <- PemData.readPrivateKey filename
-  return $ key
-
-createPublicKeyState filename = do
-  privateKey <- PemData.readPublicKey filename
-  if isNothing privateKey
-     then return Nothing
-     else do
-       let Just a = privateKey
-       seed <- getEntropy $ hashDigestSize $ OAEP.oaepHash oaepParams
-       secret <- getEntropy $ public_size a
-       return $ Just (BS.unpack seed, BS.unpack secret, a)
-
-addAdditionalPrivateRsaState Nothing _ _ = return ()
-addAdditionalPrivateRsaState (Just key) pixels image = do
-  encrypted <- readBytes pixels image $ private_size key
-  let Right decrypted = OAEP.decrypt Nothing oaepParams key (LBS.toStrict encrypted)
-  salt <- getRandomByteStringM 256
-  addSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 (C8.fromStrict decrypted) salt 5)]
-
-addAdditionalPublicRsaState Nothing _ _ = return ()
-addAdditionalPublicRsaState (Just (seed, secret, key)) pixels image = do
-  let encrypted = OAEP.encryptWithSeed (BS.pack seed) oaepParams key $ BS.pack secret
-  case encrypted of
-       Left MessageTooLong -> addAdditionalPublicRsaState (Just (seed, tail secret, key)) pixels image
-       Right b -> do
-         writeBytes pixels image $ LBS.fromStrict b
-         salt <- getRandomByteStringM 256
-         addSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 (LBS.pack secret) salt 5)]
-
-createRandomStates pixels image salt = do
-  let width = pngDynamicMap imageWidth image
-      height = pngDynamicMap imageHeight image
-  bigSalt <- readSalt pixels image $ quot (width*height) 10
-  newPbkdfSecret <- getRandomByteStringM 256
-  aesSecret1 <- getRandomByteStringM 16
-  replaceSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 newPbkdfSecret (LBS.append bigSalt salt) 5)]
-  aesSecret2 <- getRandomByteStringM 16
-  addSeedM $ createAes256RngState $ LBS.toStrict $ LBS.append aesSecret1 aesSecret2
 
 writeAndHash pixels image input = do
   hashPosition <- getCryptoPrimitives pixels (8 * (hashDigestSize SHA1))
