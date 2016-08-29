@@ -31,15 +31,15 @@ getRandomBoolM = do
   return $ case b of 1 -> True
                      0 -> False
 
-getColorAt :: DynamicImage -> Int -> Int -> Int -> Pixel8
-getColorAt (ImageY8 i) x y c = let g = pixelAt i x y in [g] !! c
-getColorAt (ImageY16 i) x y c = let g = pixelAt i x y in (fromIntegral $ [g] !! c) :: Word8
-getColorAt (ImageYA8 i) x y c = let PixelYA8 g _ = pixelAt i x y in [g] !! c
-getColorAt (ImageYA16 i) x y c = let PixelYA16 g _ = pixelAt i x y in (fromIntegral $ [g] !! c) :: Word8
-getColorAt (ImageRGB8 i) x y c = let PixelRGB8 r g b = pixelAt i x y in [r, g, b] !! c
-getColorAt (ImageRGB16 i) x y c = let PixelRGB16 r g b = pixelAt i x y in (fromIntegral $ [r, g, b] !! c) :: Word8
-getColorAt (ImageRGBA8 i) x y c = let PixelRGBA8 r g b _ = pixelAt i x y in [r, g, b] !! c
-getColorAt (ImageRGBA16 i) x y c = let PixelRGBA16 r g b _ = pixelAt i x y in (fromIntegral $ [r, g, b] !! c) :: Word8
+getColorAt :: DynamicImage -> Int -> Int -> Int -> Pixel16
+getColorAt (ImageY8 i) x y c = let g = pixelAt i x y in fromIntegral $ [g] !! c
+getColorAt (ImageY16 i) x y c = let g = pixelAt i x y in [g] !! c
+getColorAt (ImageYA8 i) x y c = let PixelYA8 g _ = pixelAt i x y in fromIntegral $ [g] !! c
+getColorAt (ImageYA16 i) x y c = let PixelYA16 g _ = pixelAt i x y in [g] !! c
+getColorAt (ImageRGB8 i) x y c = let PixelRGB8 r g b = pixelAt i x y in fromIntegral $ [r, g, b] !! c
+getColorAt (ImageRGB16 i) x y c = let PixelRGB16 r g b = pixelAt i x y in [r, g, b] !! c
+getColorAt (ImageRGBA8 i) x y c = let PixelRGBA8 r g b _ = pixelAt i x y in fromIntegral $ [r, g, b] !! c
+getColorAt (ImageRGBA16 i) x y c = let PixelRGBA16 r g b _ = pixelAt i x y in [r, g, b] !! c
 
 pngDynamicMap :: (forall pixel . (Codec.Picture.Types.Pixel pixel, PngSavable pixel, Bits (PixelBaseComponent pixel)) => Image pixel -> a)
               -> DynamicImage -> a
@@ -79,9 +79,14 @@ readSalt_ primitives image = ByS.pack $ read primitives
         y' = fromIntegral y
         c' = fromIntegral c
         result = getColorAt image x' y' c'
+        msb = fromIntegral $ shift result (-8) :: Word8
+        lsb = fromIntegral $ result :: Word8
+        result' = if msb /= 0
+                     then msb
+                     else lsb
     in if inv
-          then complement result
-          else result
+          then complement result'
+          else result'
 
 writeBits_ primitives image bits = forM_ (zipWith (\p b -> (p, b)) primitives (BS.toList bits)) $ \(p, bit) -> do
     let CryptoPrimitive (x, y, c) inv = p
