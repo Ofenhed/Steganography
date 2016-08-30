@@ -62,9 +62,10 @@ createRandomStates pixels image salt minimumEntropyBytes = do
   -- per byte, since it's inverted by the inv variable from the PixelStream.
   extraSalt <- getRandomByteStringM $ max 0 $ minimumEntropyBytes - (fromIntegral $ quot imageSaltLength 8)
   newPbkdfSecret <- getRandomByteStringM 256
-  aesSecret1 <- getRandomByteStringM 16
+  aesSecret1 <- getRandomByteStringM 32
   replaceSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 newPbkdfSecret (LBS.concat [bigSalt, salt, extraSalt]) 5)]
-  aesSecret2 <- getRandomByteStringM 16
-  addSeedM $ createAes256RngState $ LBS.toStrict $ LBS.append aesSecret1 aesSecret2
+  aesSecret2 <- getRandomByteStringM 32
+  addSeedM $ createAes256RngState $ LBS.toStrict aesSecret1
+  addSeedM $ createAes256RngState $ LBS.toStrict aesSecret2
 
 
