@@ -53,13 +53,17 @@ addAdditionalPublicRsaState (Just (seed, secret, key)) pixels image = do
          salt <- getRandomByteStringM 256
          addSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 (LBS.pack secret) salt 5)]
 
-createRandomStates pixels image salt = do
+createRandomStates pixels image salt minimumEntropyBytes = do
   let width = pngDynamicMap imageWidth image
       height = pngDynamicMap imageHeight image
-  bigSalt <- readSalt pixels image $ quot (width*height) 10
+      imageSaltLength = quot (width*height) 10
+  bigSalt <- readSalt pixels image $ imageSaltLength
+  -- For the worst possible image, bigSalt will contain 1 bit of entropy
+  -- per byte, since it's inverted by the inv variable from the PixelStream.
+  extraSalt <- getRandomByteStringM $ max 0 $ minimumEntropyBytes - (fromIntegral $ quot imageSaltLength 8)
   newPbkdfSecret <- getRandomByteStringM 256
   aesSecret1 <- getRandomByteStringM 16
-  replaceSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 newPbkdfSecret (LBS.append bigSalt salt) 5)]
+  replaceSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 newPbkdfSecret (LBS.concat [bigSalt, salt, extraSalt]) 5)]
   aesSecret2 <- getRandomByteStringM 16
   addSeedM $ createAes256RngState $ LBS.toStrict $ LBS.append aesSecret1 aesSecret2
 

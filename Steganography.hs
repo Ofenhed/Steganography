@@ -42,14 +42,14 @@ doEncrypt imageFile secretFile loops inputFile salt pkiFile = do
   input <- LBS.readFile inputFile
   publicKeyState <- createPublicKeyState pkiFile
   let Right (dynamicImage, metadata) = decodePngWithMetadata a
-      (newImage,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ pngDynamicMap (\img -> unsafeThawImage img >>= runFunc input publicKeyState (dynamicImage, metadata)) dynamicImage
+      (newImage,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ pngDynamicMap (\img -> unsafeThawImage img >>= runFunc input publicKeyState (dynamicImage, metadata) (fromIntegral $ LBS.length secret)) dynamicImage
   when (newImage /= LBS.empty) $ LBS.writeFile imageFile newImage
     where
-    runFunc input publicKeyState (dynamicImage, metadatas) mutableImage = do
+    runFunc input publicKeyState (dynamicImage, metadatas) secretLength mutableImage = do
       let w = dynamicMap imageWidth dynamicImage
           h = dynamicMap imageHeight dynamicImage
       pixels <- lift $ newRandomElementST $ PixelStream.getPixels (toNum w) (toNum h) $ (fromIntegral $ pngDynamicComponentCount dynamicImage :: Word8)
-      createRandomStates pixels dynamicImage salt
+      createRandomStates pixels dynamicImage salt secretLength
       addAdditionalPublicRsaState publicKeyState pixels mutableImage
       let dataLen = toInteger $ LBS.length input
       writeAndHash pixels mutableImage input
@@ -70,7 +70,7 @@ doDecrypt imageFile secretFile loops output salt pkiFile = do
       h = dynamicMap imageHeight dynamicImage
       (r,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ do
               pixels <- lift $ newRandomElementST $ PixelStream.getPixels (toNum w) (toNum h) $ (fromIntegral $ pngDynamicComponentCount dynamicImage :: Word8)
-              createRandomStates pixels dynamicImage salt
+              createRandomStates pixels dynamicImage salt $ fromIntegral $ LBS.length secret
               addAdditionalPrivateRsaState privateKey pixels dynamicImage
               hiddenData <- readUntilHash pixels dynamicImage
               return $ Just hiddenData
