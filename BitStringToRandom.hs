@@ -4,6 +4,7 @@
 
 module BitStringToRandom (RndT, RndST, RndIO, Rnd, RndState, getRandomM, getRandom2M, runRndT, newRandomElementST, getRandomElement, randomElementsLength, replaceSeedM, addSeedM, getRandomByteStringM) where
 
+import Control.Exception (Exception, throw)
 import Control.Monad.Identity (Identity)
 import Control.Monad.Primitive (PrimMonad, PrimState, primitive)
 import Control.Monad.ST (ST)
@@ -11,12 +12,16 @@ import Control.Monad.Trans.Class (MonadTrans, lift)
 import Control.Monad.Trans.State.Lazy (StateT, put, state, runStateT)
 import Control.Parallel.Strategies (parMap, rpar, using, rseq)
 import Data.Bits (shiftL, (.|.), xor)
+import Data.Typeable (Typeable)
 import Data.STRef (STRef, newSTRef, readSTRef, writeSTRef)
 
 import qualified Data.BitString as BS
 import qualified Data.ByteString.Lazy as ByS
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as VM
+
+data BitStringToRandomExceptions = OutOfElementsException deriving (Show, Typeable)
+instance Exception BitStringToRandomExceptions
 
 bitsNeeded :: Integer -> Integer
 bitsNeeded x = (+) 1 $ floor $ logBase 2 (fromIntegral x)
@@ -74,7 +79,7 @@ getRandomElement ref = do
   vec' <- lift $ V.unsafeThaw vec
   let n = toInteger $ VM.length vec'
   j <- if n > 0 then getRandomM $ n - 1
-                else error "Out of pixels"
+                else throw OutOfElementsException
   let j' = fromInteger j
   aa <- lift $ VM.read vec' 0
   ab <- lift $ VM.read vec' j'

@@ -63,7 +63,7 @@ doDecrypt imageFile secretFile loops output salt pkiFile = do
               createRandomStates pixels dynamicImage salt $ fromIntegral $ LBS.length secret
               addAdditionalPrivateRsaState privateKey pixels dynamicImage
               hiddenData <- readUntilHash pixels dynamicImage
-              return $ Just hiddenData
+              return $ hiddenData
   case r of Nothing -> throw NoHiddenDataFoundException
             Just x -> LBS.writeFile output x
 

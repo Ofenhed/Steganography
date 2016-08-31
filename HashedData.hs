@@ -2,7 +2,7 @@
 
 module HashedData (writeAndHash, readUntilHash) where
 
-import BitStringToRandom (getRandomByteStringM)
+import BitStringToRandom (getRandomByteStringM, randomElementsLength)
 import Crypto.Hash (Context, SHA1(..), hashDigestSize, hashUpdate, hashInit, hashFinalize, digestFromByteString)
 import Data.Bits (xor)
 import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives)
@@ -33,13 +33,16 @@ readUntilHash pixels image = do
   let Just digest = digestFromByteString $ LBS.toStrict hash
       hash' = hashUpdate (hashInit :: Context SHA1) $ LBS.toStrict hashSalt
       readUntilHashMatch h readData = if hashFinalize h == digest
-                                         then return $ LBS.pack $ reverse readData
-                                         else do
-                                           b <- readBytes pixels image 1
-                                           macXorBytes <- getRandomByteStringM 1
-                                           let [macXorByte] = LBS.unpack macXorBytes
-                                               macByte = LBS.map (\x -> xor x macXorByte) b
-                                               newHash = hashUpdate h $ LBS.toStrict macByte
-                                           readUntilHashMatch newHash (LBS.head b:readData)
+                                         then return $ Just $ LBS.pack $ reverse readData
+                                         else randomElementsLength pixels >>= \bitsLeft ->
+                                           if bitsLeft < 8
+                                              then return Nothing
+                                              else do
+                                                b <- readBytes pixels image 1
+                                                macXorBytes <- getRandomByteStringM 1
+                                                let [macXorByte] = LBS.unpack macXorBytes
+                                                    macByte = LBS.map (\x -> xor x macXorByte) b
+                                                    newHash = hashUpdate h $ LBS.toStrict macByte
+                                                readUntilHashMatch newHash (LBS.head b:readData)
   readUntilHashMatch hash' []
 
