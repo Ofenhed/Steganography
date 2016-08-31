@@ -2,10 +2,10 @@
 
 module HashedData (writeAndHash, readUntilHash) where
 
-import BitStringToRandom (getRandomByteStringM, randomElementsLength)
+import BitStringToRandom (getRandomByteStringM)
 import Crypto.Hash (Context, SHA1(..), hashDigestSize, hashUpdate, hashInit, hashFinalize, digestFromByteString)
 import Data.Bits (xor)
-import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives)
+import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives, bytesAvailable)
 
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString.Lazy as LBS
@@ -34,8 +34,8 @@ readUntilHash pixels image = do
       hash' = hashUpdate (hashInit :: Context SHA1) $ LBS.toStrict hashSalt
       readUntilHashMatch h readData = if hashFinalize h == digest
                                          then return $ Just $ LBS.pack $ reverse readData
-                                         else randomElementsLength pixels >>= \bitsLeft ->
-                                           if bitsLeft < 8
+                                         else bytesAvailable pixels >>= \bytesLeft ->
+                                           if bytesLeft == 0
                                               then return Nothing
                                               else do
                                                 b <- readBytes pixels image 1

@@ -3,7 +3,7 @@
 
 module Steganography (doEncrypt, doDecrypt, SteganographyExceptions(NotEnoughSpaceInImageException, NoHiddenDataFoundException)) where
 
-import BitStringToRandom (runRndT, newRandomElementST, randomElementsLength)
+import BitStringToRandom (runRndT, newRandomElementST)
 import Codec.Picture.Png (decodePngWithMetadata, encodePngWithMetadata, decodePng)
 import Codec.Picture.Types (dynamicMap, imageHeight, imageWidth, unsafeThawImage, unsafeFreezeImage)
 import Control.Exception (throw, Exception)
@@ -15,14 +15,14 @@ import CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivateRs
 import Data.Typeable (Typeable)
 import Data.Word (Word8)
 import HashedData (readUntilHash, writeAndHash)
-import ImageFileHandler (pngDynamicMap, pngDynamicComponentCount)
+import ImageFileHandler (pngDynamicMap, pngDynamicComponentCount, bytesAvailable)
 
 import qualified Data.BitString as BS
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified PixelStream
 
-data SteganographyExceptions = NotEnoughSpaceInImageException { maxSize :: Integer }
+data SteganographyExceptions = NotEnoughSpaceInImageException { maxSize :: Int }
                                | NoHiddenDataFoundException
                                deriving (Show, Typeable)
 instance Exception SteganographyExceptions
@@ -42,10 +42,9 @@ doEncrypt imageFile secretFile loops inputFile salt pkiFile = do
       pixels <- lift $ newRandomElementST $ PixelStream.getPixels (fromIntegral w) (fromIntegral h) $ (fromIntegral $ pngDynamicComponentCount dynamicImage :: Word8)
       createRandomStates pixels dynamicImage salt secretLength
       addAdditionalPublicRsaState publicKeyState pixels mutableImage
-      let dataLen = toInteger $ LBS.length input
-      len <- randomElementsLength pixels
-      let availLen = quot (toInteger len) 8
-      if availLen < dataLen then throw $ NotEnoughSpaceInImageException availLen
+      let dataLen = LBS.length input
+      availLen <- bytesAvailable pixels
+      if (fromIntegral availLen) < (fromIntegral dataLen) then throw $ NotEnoughSpaceInImageException availLen
                             else do
                               writeAndHash pixels mutableImage input
                               result <- unsafeFreezeImage mutableImage

@@ -1,9 +1,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE Rank2Types #-}
 
-module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, readSalt_, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException)) where
+module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, readSalt_, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException), bitsAvailable, bytesAvailable) where
 
-import BitStringToRandom (getRandomElement, RndST, getRandomM)
+import BitStringToRandom (getRandomElement, RndST, getRandomM, randomElementsLength)
 import Codec.Picture.Png (PngSavable)
 import Control.Exception (throw, Exception)
 import Control.Monad (forM, forM_)
@@ -127,3 +127,6 @@ writeBits pixels image bits = do
   lift $ writeBits_ primitives image bits
 
 writeBytes pixels image bytes = writeBits pixels image $ BS.bitStringLazy bytes
+
+bitsAvailable pixels = randomElementsLength pixels
+bytesAvailable pixels = randomElementsLength pixels >>= \bits -> return $ quot bits 8
