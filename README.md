@@ -92,6 +92,7 @@ The encrypted data is scattered around the image, but for simplicitys sake (to b
     <tr>
       <td>Field</td>
       <td>Data</td>
+      <td>Size</td>
       <td>Encrypted by symmetric key</td>
       <td>Required</td>
       <td>Comment</td>
@@ -101,12 +102,15 @@ The encrypted data is scattered around the image, but for simplicitys sake (to b
     <tr>
       <td rowspan="2">Header</td>
       <td>PKI key data</td>
+      <td>256 bits (Elliptic Curve)<hr />
+          Key Size (RSA)</td>
       <td>x</td>
       <td></td>
       <td>A symmetric key encrypted with a public RSA key or a Public DH key that in combination with the right secret key will give a shared symmetric key.</td>
     </tr>
     <tr>
       <td>Checksum</td>
+      <td>160 bits</td>
       <td>x</td>
       <td>x</td>
       <td>A single SHA1 hash sum of the form <code>SHA1(random(0..255)^256 || Enc(random, UserData))</code></td>
@@ -114,6 +118,7 @@ The encrypted data is scattered around the image, but for simplicitys sake (to b
     <tr>
       <td>Data</td>
       <td>User Data</td>
+      <td></td>
       <td>x</td>
       <td>x</td>
       <td></td>
