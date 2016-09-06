@@ -88,9 +88,8 @@ addAdditionalPrivatePkiState (Just (PrivatePkiRsa key)) pixels image = do
 addAdditionalPrivatePkiState (Just (PrivatePkiEcc key)) pixels image = do
   encryptedKey <- readBytes pixels image $ 32 -- ECC key size
   let CryptoPassed pubKey = Curve.publicKey $ LBS.toStrict encryptedKey
-      key' = LBS.pack $ BA.unpack $ Curve.dh pubKey key
-  salt <- getRandomByteStringM 256
-  addSeedM [BS.bitStringLazy $ hmacSha512Pbkdf2 key' salt 50]
+      key' = BS.pack $ BA.unpack $ Curve.dh pubKey key
+  addSeedM $ createAes256RngState $ key'
 --------------------------------------------------------------------------------
 addAdditionalPublicPkiState Nothing _ _ = return ()
 
@@ -105,11 +104,10 @@ addAdditionalPublicPkiState (Just (PublicPkiRsa (seed, secret, key))) pixels ima
          addSeedM [BS.bitStringLazy $ hmacSha512Pbkdf2 (LBS.pack secret) salt 5]
 
 addAdditionalPublicPkiState (Just (PublicPkiEcc temporaryKey publicKey)) pixels image = do
-  let key = LBS.pack $ BA.unpack $ Curve.dh publicKey temporaryKey
+  let key = BS.pack $ BA.unpack $ Curve.dh publicKey temporaryKey
       toWrite = LBS.pack $ BA.unpack $ Curve.toPublic temporaryKey
   writeBytes pixels image toWrite
-  salt <- getRandomByteStringM 256
-  addSeedM [BS.bitStringLazy $ hmacSha512Pbkdf2 key salt 50]
+  addSeedM $ createAes256RngState key
 --------------------------------------------------------------------------------
 
 createRandomStates pixels image salt minimumEntropyBytes = do

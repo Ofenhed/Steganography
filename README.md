@@ -70,7 +70,7 @@ If the private RSA keys are kept safe then it would be safe to only use the RSA 
 ##### Elliptic Curve 25519
 This is implemented as a DH exchange where the receiver creates a public and secret Curve22519 key, `Rpub` and `Rsec`, once and share `Rpub` with anyone who wants to communicate with him.
 
-When someone wants to send something using Curve 25519 the sender will create a secret and public key, `Spub` and `Ssec` every time he sends something. The sender writes `Spub` to the image. The sender then creates the shared key `shared = DH(Rpub, Ssec)` and generates the new salt `salt` of 256 bytes from the existing crypto stream. He then adds `hmacSha512Pbkdf2(shared, salt, 50)` to the crypto stream. The much bigger iteration count here is since the keys are considerably smaller than in the RSA case.
+When someone wants to send something using Curve 25519 the sender will create a secret and public key, `Spub` and `Ssec` every time he sends something. The sender writes `Spub` to the image. The sender then creates the shared key `shared = DH(Rpub, Ssec)` and generates the new salt `salt` of 256 bytes from the existing crypto stream. He then adds `AES256(shared)` to the crypto stream. The much bigger iteration count here is since the keys are considerably smaller than in the RSA case.
 
 When the receiver wants to receive data he simply reads `Spub` from the image and creates `shared = DH(Spub, Rsec)`, and adds to the crypto stream in the same way as the sender.
 
