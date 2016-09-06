@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE Rank2Types #-}
 
-module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, readSalt_, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException), bitsAvailable, bytesAvailable) where
+module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException), bitsAvailable, bytesAvailable) where
 
 import BitStringToRandom (getRandomElement, RndST, getRandomM, randomElementsLength)
 import Codec.Picture.Png (PngSavable)
@@ -80,11 +80,11 @@ readBits_ primitives image = BS.fromList $ read primitives
                       0 -> False
                       _ -> error "(_ & 1) returned something else than 0 or 1."
 
-readSalt_ primitives image = ByS.pack $ read primitives
+readSalt pixels image count = read [0..count-1] >>= return . ByS.pack
   where
-  read = map $ \p ->
-    let CryptoPrimitive (x, y, c) inv = p
-        x' = fromIntegral x
+  read = mapM $ \_ -> do
+    [CryptoPrimitive (x, y, c) inv] <- getCryptoPrimitives pixels 1
+    let x' = fromIntegral x
         y' = fromIntegral y
         c' = fromIntegral c
         result = getColorAt image x' y' c'
@@ -93,9 +93,14 @@ readSalt_ primitives image = ByS.pack $ read primitives
         result' = if msb /= 0
                      then msb
                      else lsb
-    in if inv
-          then complement result'
-          else result'
+        result'' = if inv
+                      then complement result'
+                      else result'
+    -- This will throw away bits until a number between 0 and result'' is
+    -- found. This will not only return a salt, but also salt the current
+    -- crypto stream by throwing away a random number a of bits.
+    _ <- getRandomM $ fromIntegral result''
+    return result''
 
 writeBits_ primitives image bits = forM_ (zipWith (\p b -> (p, b)) primitives (BS.toList bits)) $ \(p, bit) -> do
     let CryptoPrimitive (x, y, c) inv = p
@@ -119,10 +124,6 @@ readBits pixels image count = do
 readBytes pixels image count = do
   a <- readBits pixels image $ count * 8
   return $ BS.realizeBitStringLazy a
-
-readSalt pixels image count = do
-  primitives <- getCryptoPrimitives pixels count
-  return $ readSalt_ primitives image
 
 writeBits pixels image bits = do
   primitives <- getCryptoPrimitives pixels $ BS.length bits
