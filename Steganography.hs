@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
-module Steganography (doEncrypt, doDecrypt, SteganographyExceptions(NotEnoughSpaceInImageException, NoHiddenDataFoundException)) where
+module Steganography (doEncrypt, doDecrypt, SteganographyExceptions(..)) where
 
 import BitStringToRandom (runRndT, newRandomElementST)
 import Codec.Picture.Png (decodePngWithMetadata, encodePngWithMetadata, decodePng)
@@ -11,7 +11,7 @@ import Control.Monad.ST (runST)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad (when)
 import Crypto.Pbkdf2 (hmacSha512Pbkdf2)
-import CryptoState (readPublicKey, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates)
+import CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates)
 import Data.Typeable (Typeable)
 import Data.Word (Word8)
 import HashedData (readUntilHash, writeAndHash)
@@ -31,17 +31,17 @@ doEncrypt imageFile secretFile loops inputFile salt pkiFile = do
   a <- BS.readFile imageFile
   secret <- LBS.readFile secretFile
   input <- LBS.readFile inputFile
-  publicKey <- readPublicKey pkiFile
+  publicKeyState <- createPublicKeyState pkiFile
   let Right (dynamicImage, metadata) = decodePngWithMetadata a
-      (newImage,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ pngDynamicMap (\img -> unsafeThawImage img >>= runFunc input publicKey (dynamicImage, metadata) (fromIntegral $ LBS.length secret)) dynamicImage
+      (newImage,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ pngDynamicMap (\img -> unsafeThawImage img >>= runFunc input publicKeyState (dynamicImage, metadata) (fromIntegral $ LBS.length secret)) dynamicImage
   when (newImage /= LBS.empty) $ LBS.writeFile imageFile newImage
     where
-    runFunc input publicKey (dynamicImage, metadatas) secretLength mutableImage = do
+    runFunc input publicKeyState (dynamicImage, metadatas) secretLength mutableImage = do
       let w = dynamicMap imageWidth dynamicImage
           h = dynamicMap imageHeight dynamicImage
       pixels <- lift $ newRandomElementST $ PixelStream.getPixels (fromIntegral w) (fromIntegral h) $ (fromIntegral $ pngDynamicComponentCount dynamicImage :: Word8)
       createRandomStates pixels dynamicImage salt secretLength
-      addAdditionalPublicPkiState publicKey pixels mutableImage
+      addAdditionalPublicPkiState publicKeyState pixels mutableImage
       let dataLen = LBS.length input
       availLen <- bytesAvailable pixels
       if (fromIntegral availLen) < (fromIntegral dataLen) then throw $ NotEnoughSpaceInImageException availLen

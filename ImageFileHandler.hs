@@ -32,6 +32,7 @@ getRandomBoolM = do
   b <- getRandomM 1
   return $ case b of 1 -> True
                      0 -> False
+                     _ -> error "Incorrent response from getRandomM"
 
 data ImageFileHandlerExceptions = UnsupportedFormatException deriving (Show, Typeable)
 instance Exception ImageFileHandlerExceptions
@@ -77,6 +78,7 @@ readBits_ primitives image = BS.fromList $ read primitives
     in xor inv $ case result of
                       1 -> True
                       0 -> False
+                      _ -> error "(_ & 1) returned something else than 0 or 1."
 
 readSalt_ primitives image = ByS.pack $ read primitives
   where

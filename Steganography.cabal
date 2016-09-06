@@ -1,5 +1,5 @@
 Name:           Steganography
-Version:        0.0.9
+Version:        0.1.0
 Author:         Marcus Ofenhed <marcus@conditionraise.se>
 Maintainer:     Marcus Ofenhed <marcus@conditionraise.se>
 License:        GPLv2
@@ -16,25 +16,26 @@ Executable Steganography-commandline
   Main-Is:           CommandLineMain.hs
   Default-Language:  Haskell2010
   Build-Depends:     base>= 4 && <5,
-                     bytestring,
-                     primitive,
-                     cryptonite,
-                     binary,
-                     JuicyPixels,
-                     transformers,
-                     mtl,
-                     vector,
-                     Lazy-Pbkdf2,
                      array,
-                     bitstring,
-                     parallel,
-                     console-program,
-                     memory,
-                     x509,
-                     x509-store,
-                     pem,
                      asn1-encoding,
-                     asn1-types
+                     asn1-types,
+                     base64-bytestring,
+                     binary,
+                     bitstring,
+                     bytestring,
+                     console-program,
+                     cryptonite,
+                     JuicyPixels,
+                     Lazy-Pbkdf2,
+                     memory,
+                     mtl,
+                     parallel,
+                     pem,
+                     primitive,
+                     transformers,
+                     vector,
+                     x509,
+                     x509-store
 
 Source-Repository head
   Type:       git

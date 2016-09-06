@@ -1,11 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
-module EccKeys (generatePrivateEccKey, readPublicKey, readSecretKey, SecretKeyPath(..), PublicKeyPath(..)) where
+module EccKeys (generateKeyPair, readPublicKey, readSecretKey, SecretKeyPath(..), PublicKeyPath(..), generateSecretKey) where
 
 import Control.Exception (Exception, throw)
 import Crypto.Random.Entropy (getEntropy)
 import Crypto.Error (CryptoFailable(CryptoPassed, CryptoFailed))
-import Crypto.PubKey.Curve25519 (secretKey, publicKey, toPublic, dh, PublicKey(..), SecretKey(..))
-import Data.Char (chr)
+import Crypto.PubKey.Curve25519 (secretKey, publicKey, toPublic, PublicKey, SecretKey)
 import Data.Either (isRight)
 import Data.Typeable (Typeable)
 
@@ -59,13 +58,16 @@ readSecretKey (SecretKeyPath secKey) = do
 data CryptoGenerationException = CryptoGenerationException deriving (Show, Typeable)
 instance Exception CryptoGenerationException
 
-generatePrivateEccKey (SecretKeyPath privKey, PublicKeyPath pubKey) = do
+generateSecretKey = do
   entropy <- getEntropy 32 :: IO BS.ByteString
   let key = secretKey entropy
   case key of
        CryptoFailed _ -> throw CryptoGenerationException
-       CryptoPassed secret -> do
-         let public = toPublic secret
-         C8.writeFile pubKey $ encodePublicKey public
-         C8.writeFile privKey $ encodeSecretKey secret
+       CryptoPassed secret -> return secret
+
+generateKeyPair (SecretKeyPath privKey, PublicKeyPath pubKey) = do
+  secret <- generateSecretKey
+  let public = toPublic secret
+  C8.writeFile pubKey $ encodePublicKey public
+  C8.writeFile privKey $ encodeSecretKey secret
 
