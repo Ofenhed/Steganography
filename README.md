@@ -1,7 +1,7 @@
 # Steganography
 This app will hide data in images based on a shared key and a predetermined encryption complexity between a sender and a receiver.
 
-Notice: This is pretty much just a project I created to learn Haskell, and while the crypto is probably strong the steganography is not!
+Notice: This is pretty much just a project I created to learn Haskell, and while the crypto is strong the steganography is not!
 
 ## Maintaining security
 To maintain security with this application, the following needs to be true.

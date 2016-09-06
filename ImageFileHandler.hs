@@ -97,8 +97,9 @@ readSalt pixels image count = read [0..count-1] >>= return . ByS.pack
                       then complement result'
                       else result'
     -- This will throw away bits until a number between 0 and result'' is
-    -- found. This will not only return a salt, but also salt the current
-    -- crypto stream by throwing away a random number a of bits.
+    -- found. This means that this function will not only return a salt,
+    -- but also salt the current crypto stream by throwing away a random
+    -- number a of bits.
     _ <- getRandomM $ fromIntegral result''
     return result''
 
