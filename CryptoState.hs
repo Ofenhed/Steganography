@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivateRsaState, addAdditionalPublicRsaState, createRandomStates) where
+module CryptoState (readPublicKey, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates) where
 
 import AesEngine (createAes256RngState)
 import BitStringToRandom (replaceSeedM, addSeedM, getRandomByteStringM)
@@ -26,7 +26,7 @@ readPrivateKey filename = do
   key <- PemData.readPrivateKey filename
   return $ key
 
-createPublicKeyState filename = do
+readPublicKey filename = do
   privateKey <- PemData.readPublicKey filename
   if isNothing privateKey
      then return Nothing
@@ -36,18 +36,18 @@ createPublicKeyState filename = do
        secret <- getEntropy $ public_size a
        return $ Just (BS.unpack seed, BS.unpack secret, a)
 
-addAdditionalPrivateRsaState Nothing _ _ = return ()
-addAdditionalPrivateRsaState (Just key) pixels image = do
+addAdditionalPrivatePkiState Nothing _ _ = return ()
+addAdditionalPrivatePkiState (Just key) pixels image = do
   encrypted <- readBytes pixels image $ private_size key
   let Right decrypted = OAEP.decrypt Nothing oaepParams key (LBS.toStrict encrypted)
   salt <- getRandomByteStringM 256
   addSeedM [(BS.bitStringLazy $ hmacSha512Pbkdf2 (C8.fromStrict decrypted) salt 5)]
 
-addAdditionalPublicRsaState Nothing _ _ = return ()
-addAdditionalPublicRsaState (Just (seed, secret, key)) pixels image = do
+addAdditionalPublicPkiState Nothing _ _ = return ()
+addAdditionalPublicPkiState (Just (seed, secret, key)) pixels image = do
   let encrypted = OAEP.encryptWithSeed (BS.pack seed) oaepParams key $ BS.pack secret
   case encrypted of
-       Left MessageTooLong -> addAdditionalPublicRsaState (Just (seed, tail secret, key)) pixels image
+       Left MessageTooLong -> addAdditionalPublicPkiState (Just (seed, tail secret, key)) pixels image
        Right b -> do
          writeBytes pixels image $ LBS.fromStrict b
          salt <- getRandomByteStringM 256

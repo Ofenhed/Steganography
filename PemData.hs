@@ -27,7 +27,7 @@ readPublicKey file = do
             d <- decodeASN1'' BER $ pemContent decodedKeyData
             pub <- fromASN1 d :: Either String (PubKey, [ASN1])
             case pub of
-                 (key@(PubKeyRSA _), _) -> return key
+                 ((PubKeyRSA a), _) -> return a
                  --(key@(PubKeyEC _), b) -> return key
                  otherwise -> Left []
   case key of
