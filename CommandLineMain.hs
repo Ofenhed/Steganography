@@ -1,4 +1,5 @@
 import Steganography (doEncrypt, doDecrypt)
+import EccKeys (generatePrivateEccKey, SecretKeyPath(..), PublicKeyPath(..))
 
 import System.Console.Command (Commands,Tree(Node),Command,command,withOption,withNonOption,io)
 import System.Console.Program (single,showUsage)
@@ -12,6 +13,7 @@ myCommands = Node
   [
     Node encrypt [],
     Node decrypt [],
+    Node generateKeys [],
     Node help []
   ]
 
@@ -31,6 +33,9 @@ decrypt = command "decrypt" "Get data from a PNG file. Both the SHARED-SECRET-FI
                 withNonOption (namedFile "OUTPUT-FILE") $ \file ->
                   withOption saltOption $ \salt ->
                     withOption pkiFileOption $ \pkiFile -> io $ doDecrypt image secret loops file (C8.pack salt) pkiFile
+
+generateKeys = command "generateKeys" "Generate Curve22519 keys. This will create two files, [filename].public.key and [filename].secret.key. To use these keys [filename].public.key is shared with anyone who wants to encrypt something for you. [filename].secret.key MUST NEVER BE SHARED!" $
+  withNonOption (namedFile "FILENAME") $ \filename -> io $ generatePrivateEccKey (SecretKeyPath $ filename ++ ".secret.key", PublicKeyPath $ filename ++ ".public.key")
 
 namedFile :: String -> Argument.Type FilePath
 namedFile name = Argument.Type { Argument.name = name, Argument.parser = Right, Argument.defaultValue = Nothing }
