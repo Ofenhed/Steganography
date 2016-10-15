@@ -12,11 +12,13 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad (when)
 import Crypto.Pbkdf2 (hmacSha512Pbkdf2)
 import CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature)
+import Data.Maybe (isJust)
 import Data.Typeable (Typeable)
 import Data.Word (Word8)
 import HashedData (readUntilHash, writeAndHash)
 import ImageFileHandler (pngDynamicMap, pngDynamicComponentCount, bytesAvailable)
 
+import qualified EccKeys
 import qualified Data.BitString as BS
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
@@ -25,13 +27,19 @@ import qualified PixelStream
 data SteganographyExceptions = NotEnoughSpaceInImageException { maxSize :: Int }
                                | NoHiddenDataFoundException
                                | FoundDataButNoValidSignature
+                               | TriedToEncryptSecretCertificate
                                deriving (Show, Typeable)
 instance Exception SteganographyExceptions
+
+blockSecretCertificateAsInput inputFile = do
+  inputCertificate <- EccKeys.readSecretKey $ EccKeys.SecretKeyPath inputFile
+  when (isJust inputCertificate) $ throw TriedToEncryptSecretCertificate
 
 doEncrypt imageFile secretFile loops inputFile salt pkiFile signFile = do
   a <- BS.readFile imageFile
   secret <- LBS.readFile secretFile
   input <- LBS.readFile inputFile
+  blockSecretCertificateAsInput inputFile
   publicKeyState <- createPublicKeyState pkiFile
   signState <- createSignatureState signFile
   let Right (dynamicImage, metadata) = decodePngWithMetadata a
