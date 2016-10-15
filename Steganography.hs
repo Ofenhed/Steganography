@@ -20,6 +20,7 @@ import ImageFileHandler (pngDynamicMap, pngDynamicComponentCount, bytesAvailable
 
 import qualified EccKeys
 import qualified Data.BitString as BS
+import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified PixelStream
@@ -57,7 +58,7 @@ doEncrypt imageFile secretFile loops inputFile salt pkiFile signFile = do
       if (fromIntegral availLen) < (fromIntegral dataLen) then throw $ NotEnoughSpaceInImageException availLen
                             else do
                               hash <- writeAndHash pixels mutableImage input
-                              addSignature signState hash pixels mutableImage
+                              addSignature signState (BA.unpack hash) pixels mutableImage
                               result <- unsafeFreezeImage mutableImage
                               return $ encodePngWithMetadata metadatas result
 
