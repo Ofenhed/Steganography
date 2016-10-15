@@ -24,7 +24,8 @@ encrypt = command "encrypt" "Encrypt and hide a file into a PNG file. Notice tha
               withNonOption Argument.integer $ \loops ->
                 withNonOption (namedFile "INPUT-FILE") $ \file ->
                   withOption saltOption $ \salt ->
-                    withOption pkiFileOption $ \pkiFile -> io $ doEncrypt image secret loops file (C8.pack salt) pkiFile
+                    withOption pkiFileOption $ \pkiFile ->
+                      withOption signatureOption $ \signFile -> io $ doEncrypt image secret loops file (C8.pack salt) pkiFile signFile
 
 decrypt = command "decrypt" "Get data from a PNG file. Both the SHARED-SECRET-FILE and INT has to be the same as when the file was encrypted. OUTPUT-FILE will be overwritten without warning." $
           withNonOption (namedFile "IMAGE-FILE") $ \image ->
@@ -32,7 +33,8 @@ decrypt = command "decrypt" "Get data from a PNG file. Both the SHARED-SECRET-FI
               withNonOption Argument.integer $ \loops ->
                 withNonOption (namedFile "OUTPUT-FILE") $ \file ->
                   withOption saltOption $ \salt ->
-                    withOption pkiFileOption $ \pkiFile -> io $ doDecrypt image secret loops file (C8.pack salt) pkiFile
+                    withOption pkiFileOption $ \pkiFile ->
+                      withOption signatureOption $ \signFile -> io $ doDecrypt image secret loops file (C8.pack salt) pkiFile signFile
 
 generateKey = command "generateKey" "Generate Curve22519 keys. This will create two files, [filename].public.key and [filename].secret.key. To use these keys [filename].public.key is shared with anyone who wants to encrypt something for you. [filename].secret.key MUST NEVER BE SHARED!" $
   withNonOption (namedFile "FILENAME") $ \filename -> io $ generateKeyPair (SecretKeyPath $ filename ++ ".secret.key", PublicKeyPath $ filename ++ ".public.key")
@@ -41,7 +43,10 @@ namedFile :: String -> Argument.Type FilePath
 namedFile name = Argument.Type { Argument.name = name, Argument.parser = Right, Argument.defaultValue = Nothing }
 
 pkiFileOption :: Argument.Option String
-pkiFileOption = Argument.option ['p'] ["pki"] Argument.file "" "A PEM key to use for public key cryptography. Public key for encryption and private key for decryption."
+pkiFileOption = Argument.option ['p'] ["pki"] Argument.file "" "A PKI key to use for public key cryptography. Public key for encryption and private key for decryption."
+
+signatureOption :: Argument.Option String
+signatureOption = Argument.option ['v'] ["signature"] Argument.string "" "A PKI key to use for public key signing. Private key for signing and public key for verifying."
 
 saltOption :: Argument.Option String
 saltOption = Argument.option ['s'] ["salt"] Argument.string "" "A salt to be applied to the encryption."

@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates) where
+module CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature) where
 
 import AesEngine (createAes256RngState)
 import BitStringToRandom (replaceSeedM, addSeedM, getRandomByteStringM)
@@ -17,6 +17,7 @@ import Data.Word (Word8)
 import ImageFileHandler (readBytes, writeBytes, readSalt, pngDynamicMap)
 
 import qualified Crypto.PubKey.Curve25519 as Curve
+import qualified Crypto.PubKey.Ed25519 as ED
 import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.PubKey.RSA.OAEP as OAEP
 import qualified Data.BitString as BS
@@ -29,14 +30,16 @@ import qualified PemData (readPublicKey, readPrivateKey)
 
 oaepParams = OAEP.defaultOAEPParams SHA3_256
 
-data CryptoStateException = CouldNotReadPkiFileException deriving (Show, Typeable)
+data CryptoStateException = CouldNotReadPkiFileException |
+                            CouldNotAddSignature |
+                            CouldNotVerifySignature deriving (Show, Typeable)
 instance Exception CryptoStateException
 
 data PrivatePki = PrivatePkiRsa RSA.PrivateKey
-                | PrivatePkiEcc Curve.SecretKey
+                | PrivatePkiEcc EccKeys.SecretEccKey
 
 data PublicPki = PublicPkiRsa ([Word8], [Word8], RSA.PublicKey)
-               | PublicPkiEcc Curve.SecretKey Curve.PublicKey
+               | PublicPkiEcc EccKeys.SecretEccKey EccKeys.PublicEccKey
 
 readPrivateKey [] = return Nothing
 readPrivateKey filename = do
@@ -88,7 +91,7 @@ addAdditionalPrivatePkiState (Just (PrivatePkiRsa key)) pixels image = do
 addAdditionalPrivatePkiState (Just (PrivatePkiEcc key)) pixels image = do
   encryptedKey <- readBytes pixels image $ 32 -- ECC key size
   let CryptoPassed pubKey = Curve.publicKey $ LBS.toStrict encryptedKey
-      key' = BS.pack $ BA.unpack $ Curve.dh pubKey key
+      key' = BS.pack $ BA.unpack $ Curve.dh pubKey $ EccKeys.getSecretCryptoKey key
   addSeedM $ createAes256RngState $ key'
 --------------------------------------------------------------------------------
 addAdditionalPublicPkiState Nothing _ _ = return ()
@@ -104,12 +107,46 @@ addAdditionalPublicPkiState (Just (PublicPkiRsa (seed, secret, key))) pixels ima
          addSeedM [BS.bitStringLazy $ hmacSha512Pbkdf2 (LBS.pack secret) salt 5]
 
 addAdditionalPublicPkiState (Just (PublicPkiEcc temporaryKey publicKey)) pixels image = do
-  let key = BS.pack $ BA.unpack $ Curve.dh publicKey temporaryKey
-      toWrite = LBS.pack $ BA.unpack $ Curve.toPublic temporaryKey
+  let temporaryKey' = EccKeys.getSecretCryptoKey temporaryKey
+      key = BS.pack $ BA.unpack $ Curve.dh (EccKeys.getPublicCryptoKey publicKey) $ temporaryKey'
+      toWrite = LBS.pack $ BA.unpack $ Curve.toPublic temporaryKey'
   writeBytes pixels image toWrite
   addSeedM $ createAes256RngState key
 --------------------------------------------------------------------------------
 
+createSignatureState filename = do
+  key <- readPrivateKey filename
+  case key of
+       Nothing -> return Nothing
+       k@(Just (PrivatePkiEcc _)) -> return k
+       _ -> throw CouldNotReadPkiFileException
+
+addSignature Nothing _ _ _ = return ()
+addSignature (Just (PrivatePkiEcc key)) msg pixels image = do
+  let key' = EccKeys.getSecretSignKey key
+  case key' of
+       Nothing -> throw CouldNotAddSignature 
+       Just k -> do
+         let signature = ED.sign k (ED.toPublic k) msg
+         writeBytes pixels image (LBS.pack $ BA.unpack signature)
+
+createVerifySignatureState filename = do
+  key <- createPublicKeyState filename
+  case key of
+       Nothing -> return Nothing
+       k@(Just (PublicPkiEcc _ _)) -> return $ k
+       _ -> throw CouldNotReadPkiFileException
+
+verifySignature Nothing _ _ _ = return Nothing
+verifySignature (Just (PublicPkiEcc _ key)) msg pixels image = do
+  signature <- readBytes pixels image $ 64 -- ED25519 signature size
+  let key' = EccKeys.getPublicSignKey key
+  let signature' = ED.signature $ BS.pack $ LBS.unpack signature
+  case (key', signature') of
+       (Just k, CryptoPassed s) -> do
+         return $ Just $ ED.verify k msg s
+       _ -> throw CouldNotVerifySignature
+--------------------------------------------------------------------------------
 createRandomStates pixels image salt minimumEntropyBytes = do
   let width = pngDynamicMap imageWidth image
       height = pngDynamicMap imageHeight image
@@ -124,5 +161,3 @@ createRandomStates pixels image salt minimumEntropyBytes = do
   aesSecret2 <- getRandomByteStringM 32
   addSeedM $ createAes256RngState $ LBS.toStrict aesSecret1
   addSeedM $ createAes256RngState $ LBS.toStrict aesSecret2
-
-

@@ -25,7 +25,9 @@ writeAndHash pixels image input = do
                                                 newHash = hashUpdate h $ LBS.toStrict macByte
                                             writeAndHashRecursive (LBS.tail input') newHash
   h <- writeAndHashRecursive input hash'
-  writeBytes_ hashPosition image (LBS.pack $ BA.unpack h)
+  let hash = LBS.pack $ BA.unpack h
+  writeBytes_ hashPosition image hash
+  return h
 
 readUntilHash pixels image = do
   hash <- readBytes pixels image (hashDigestSize SHA1)
@@ -33,7 +35,7 @@ readUntilHash pixels image = do
   let Just digest = digestFromByteString $ LBS.toStrict hash
       hash' = hashUpdate (hashInit :: Context SHA1) $ LBS.toStrict hashSalt
       readUntilHashMatch h readData = if hashFinalize h == digest
-                                         then return $ Just $ LBS.pack $ reverse readData
+                                         then return $ Just (LBS.pack $ reverse readData, hash)
                                          else bytesAvailable pixels >>= \bytesLeft ->
                                            if bytesLeft == 0
                                               then return Nothing

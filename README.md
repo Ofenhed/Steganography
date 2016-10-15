@@ -121,7 +121,15 @@ The encrypted data is scattered around the image, but for simplicitys sake (to b
       <td></td>
       <td>x</td>
       <td>x</td>
+      <td>This is the only field included in the checksum.</td>
+    </tr>
+    <tr>
+      <td>Footer</td>
+      <td>Signature</td>
+      <td>512 bits</td>
+      <td>x</td>
       <td></td>
+      <td>A ED25519 signature of the checksum. This is put at the end since it's not required and to give full compatibility between signed and unsigned packages.</td>
     </tr>
   </tbody>
 </table>
