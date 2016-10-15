@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE Rank2Types #-}
 
-module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException), bitsAvailable, bytesAvailable) where
+module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException, DifferentBetweenSizeOfPrimitivesAndDataLength), bitsAvailable, bytesAvailable) where
 
 import BitStringToRandom (getRandomElement, RndST, getRandomM, randomElementsLength)
 import Codec.Picture.Png (PngSavable)
@@ -34,7 +34,9 @@ getRandomBoolM = do
                      0 -> False
                      _ -> error "Incorrent response from getRandomM"
 
-data ImageFileHandlerExceptions = UnsupportedFormatException deriving (Show, Typeable)
+data ImageFileHandlerExceptions = UnsupportedFormatException |
+                                  DifferentBetweenSizeOfPrimitivesAndDataLength
+                                  deriving (Show, Typeable)
 instance Exception ImageFileHandlerExceptions
 
 getColorAt :: I.DynamicImage -> Int -> Int -> Int -> I.Pixel16
@@ -103,7 +105,11 @@ readSalt pixels image count = read [0..count-1] >>= return . ByS.pack
     _ <- getRandomM $ fromIntegral result''
     return result''
 
-writeBits_ primitives image bits = forM_ (zipWith (\p b -> (p, b)) primitives (BS.toList bits)) $ \(p, bit) -> do
+writeBits_ primitives image bits = if length primitives >= (fromIntegral $ BS.length bits)
+                                      then forM_ (zipWith (\p b -> (p, b)) primitives (BS.toList bits)) inner
+                                      else error "Got more data that crypto primitives"
+  where
+  inner (p, bit) = do
     let CryptoPrimitive (x, y, c) inv = p
         x' = fromIntegral x
         y' = fromIntegral y
