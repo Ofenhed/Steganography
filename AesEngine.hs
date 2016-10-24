@@ -1,9 +1,9 @@
 module AesEngine (createAes256RngState) where
 
-import BitStringToRandom (RndState)
 import Crypto.Cipher.AES (AES256)
-import Crypto.Error (CryptoFailable(CryptoPassed))
 import Crypto.Cipher.Types (IV, cipherInit, blockSize, nullIV, ctrCombine, ivAdd)
+import Crypto.Error (CryptoFailable(CryptoPassed))
+import Crypto.RandomMonad (RndState)
 
 import qualified Data.ByteString.Lazy as ByS
 import qualified Data.ByteString as BySS

@@ -3,7 +3,7 @@
 
 module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException, DifferentBetweenSizeOfPrimitivesAndDataLength), bitsAvailable, bytesAvailable) where
 
-import BitStringToRandom (getRandomElement, RndST, getRandomM, randomElementsLength)
+import Crypto.RandomMonad (getRandomElement, RndST, getRandomM, randomElementsLength)
 import Codec.Picture.Png (PngSavable)
 import Control.Exception (throw, Exception)
 import Control.Monad (forM, forM_)

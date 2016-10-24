@@ -3,7 +3,6 @@
 module CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature) where
 
 import AesEngine (createAes256RngState)
-import BitStringToRandom (replaceSeedM, addSeedM, getRandomByteStringM)
 import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives, readSalt, pngDynamicMap)
 import Pbkdf2 (hmacSha512Pbkdf2)
 
@@ -13,6 +12,7 @@ import Crypto.Error (CryptoFailable(CryptoPassed))
 import Crypto.Hash (SHA3_256(..), hashDigestSize)
 import Crypto.PubKey.RSA.Types (private_size, Error(MessageTooLong), public_size)
 import Crypto.Random.Entropy (getEntropy)
+import Crypto.RandomMonad (replaceSeedM, addSeedM, getRandomByteStringM)
 import Data.Maybe (isNothing, isJust, fromJust)
 import Data.Typeable (Typeable)
 import Data.Word (Word8)

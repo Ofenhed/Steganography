@@ -2,7 +2,7 @@
 
 module HashedData (writeAndHash, readUntilHash) where
 
-import BitStringToRandom (getRandomByteStringM)
+import Crypto.RandomMonad (getRandomByteStringM)
 import Crypto.Hash (Context, SHA1(..), hashDigestSize, hashUpdate, hashInit, hashFinalize, digestFromByteString)
 import Data.Bits (xor)
 import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives, bytesAvailable)

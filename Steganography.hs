@@ -3,20 +3,21 @@
 
 module Steganography (doEncrypt, doDecrypt, SteganographyExceptions(..)) where
 
-import BitStringToRandom (runRndT, newRandomElementST)
+import CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature)
+import HashedData (readUntilHash, writeAndHash)
+import ImageFileHandler (pngDynamicMap, pngDynamicComponentCount, bytesAvailable)
+import Pbkdf2 (hmacSha512Pbkdf2)
+
 import Codec.Picture.Png (decodePngWithMetadata, encodePngWithMetadata, decodePng)
 import Codec.Picture.Types (dynamicMap, imageHeight, imageWidth, unsafeThawImage, unsafeFreezeImage)
 import Control.Exception (throw, Exception)
 import Control.Monad.ST (runST)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad (when)
-import Pbkdf2 (hmacSha512Pbkdf2)
-import CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature)
+import Crypto.RandomMonad (runRndT, newRandomElementST)
 import Data.Maybe (isJust)
 import Data.Typeable (Typeable)
 import Data.Word (Word8)
-import HashedData (readUntilHash, writeAndHash)
-import ImageFileHandler (pngDynamicMap, pngDynamicComponentCount, bytesAvailable)
 
 import qualified EccKeys
 import qualified Data.BitString as BS
@@ -27,14 +28,14 @@ import qualified PixelStream
 
 data SteganographyExceptions = NotEnoughSpaceInImageException { maxSize :: Int }
                                | NoHiddenDataFoundException
-                               | FoundDataButNoValidSignature
-                               | TriedToEncryptSecretCertificate
+                               | FoundDataButNoValidSignatureException
+                               | TriedToEncryptSecretCertificateException
                                deriving (Show, Typeable)
 instance Exception SteganographyExceptions
 
 blockSecretCertificateAsInput inputFile = do
   inputCertificate <- EccKeys.readSecretKey $ EccKeys.SecretKeyPath inputFile
-  when (isJust inputCertificate) $ throw TriedToEncryptSecretCertificate
+  when (isJust inputCertificate) $ throw TriedToEncryptSecretCertificateException
 
 doEncrypt imageFile secretFile loops inputFile salt pkiFile signFile = do
   a <- BS.readFile imageFile
@@ -84,4 +85,4 @@ doDecrypt imageFile secretFile loops output salt pkiFile signFile = do
             Just (x, Nothing) -> LBS.writeFile output x
             Just (x, Just verified) -> if verified
                                           then LBS.writeFile output x
-                                          else throw FoundDataButNoValidSignature
+                                          else throw FoundDataButNoValidSignatureException

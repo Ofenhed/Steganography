@@ -1,5 +1,5 @@
 Name:                Steganography
-Version:             1.0.0
+Version:             1.0.2
 Author:              Marcus Ofenhed <marcus@conditionraise.se>
 Maintainer:          Marcus Ofenhed <marcus@conditionraise.se>
 License:             GPL-2
@@ -28,13 +28,10 @@ Executable Steganography-commandline
                      cryptonite,
                      JuicyPixels,
                      Lazy-Pbkdf2 >= 2.1.0,
+                     BitStringRandomMonad,
                      memory,
-                     mtl,
-                     parallel,
                      pem,
-                     primitive,
                      transformers,
-                     vector,
                      x509,
                      x509-store
 
