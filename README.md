@@ -41,6 +41,15 @@ If you do use the same password and salt every time, but change the picture, the
 
 ## Technical description
 
+### PBKDF2
+The PBKDF2 algorithm in this program has been slightly modified for increased security. The difference is that now for every block the first iteration will have a salt based on previous results. This prevents jumps in the hash stream, since to calculate block N you need to calculate N blocks, unlike PBKDF2 which allows you to calculate any block.
+
+Since PBKDF2 appends the counter to the salt, a huge salt can be reduced to the size of the internal state of the hash plus a maximum of one block size. The added salt in the modified PBKDF2 algorithm is instead prepended to the chosen salt, which means that for every block the hash for the salt will have to be calculated in its entirety.
+
+These two modicitations will improve the security of this program without adding any workload worth mentioning.
+
+For more information on the change, check [the documentation for Lazy-Pbkdf2](https://hackage.haskell.org/package/Lazy-Pbkdf2-2.1.0/docs/Crypto-Pbkdf2.html).
+
 ### Pixel stream
 A pixel stream is used to perform the Steganography encryption. It has the type `[(x, y, color, invertBit)]`. It refers to which pixel should be modified, where the data modified is the least significant bit of the pixel and color chosen. The bit that is read/written is inverted if invertBit is 1.
 

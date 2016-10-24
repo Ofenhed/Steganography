@@ -1,16 +1,17 @@
-Name:           Steganography
-Version:        0.1.4
-Author:         Marcus Ofenhed <marcus@conditionraise.se>
-Maintainer:     Marcus Ofenhed <marcus@conditionraise.se>
-License:        GPLv2
-License-File:   LICENSE
-Synopsis:       Steganography program.
-Description:    This program is designed to hide information in images without
-                possibility of detection. The information is encryted and
-                hidden at random locations in the image.
-Category:       Cryptography
-Build-Type:     Simple
-cabal-version:  >= 1.10
+Name:                Steganography
+Version:             1.0.0
+Author:              Marcus Ofenhed <marcus@conditionraise.se>
+Maintainer:          Marcus Ofenhed <marcus@conditionraise.se>
+License:             GPL-2
+License-File:        LICENSE
+Synopsis:            Steganography program.
+Description:         This program is designed to hide information in images without
+                     possibility of detection. The information is encryted and
+                     hidden at random locations in the image.
+Category:            Cryptography
+cabal-version:       >= 1.10
+Build-Type:          Simple
+
 
 Executable Steganography-commandline
   Main-Is:           CommandLineMain.hs
@@ -26,7 +27,7 @@ Executable Steganography-commandline
                      console-program,
                      cryptonite,
                      JuicyPixels,
-                     Lazy-Pbkdf2,
+                     Lazy-Pbkdf2 >= 2.1.0,
                      memory,
                      mtl,
                      parallel,
