@@ -59,7 +59,7 @@ doEncrypt imageFile secretFile loops inputFile salt pkiFile signFile = do
       if (fromIntegral availLen) < (fromIntegral dataLen) then throw $ NotEnoughSpaceInImageException availLen
                             else do
                               hash <- writeAndHash pixels mutableImage input
-                              addSignature signState (BA.unpack hash) pixels mutableImage
+                              addSignature signState hash pixels mutableImage
                               result <- unsafeFreezeImage mutableImage
                               return $ encodePngWithMetadata metadatas result
 

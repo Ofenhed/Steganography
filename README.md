@@ -93,6 +93,11 @@ Using the pixel stream, write a 20 byte HMACSHA1 hash sum of the data to be encr
 #### Decryption
 Using the pixel stream, read out a 20 byte HMACSHA1 hash sum from the image and the password from the random stream. Read out data byte by byte until the hash sum matches.
 
+#### Signature checksum
+The signature is calculated on a huge checksum list, consisting of SHA-512 and some of the finalists for SHA3, namely SHA3-512, Blake2b-512 and Skein512-512. These are calculated on the actual plain text (note that ED25519 hashes the signed data) and is encrypted before being added to the image. The reason for this is that I want to make sure that someone can't mess with the crypto stream somehow (should be impossible, but still). The header hash is calculated as (simplified) SHA1(data xor random). This means that if you can modify random, you can change it so that the SHA1 can be a hash of any data of equal length. This is acceptable for the header hash, but not for signatures which is implemented so that it's verifiable that the exact decrypted data came from the sender.
+
+The exact format of the signature will be `ED25519(HMAC-SHA3-512(random^4096, data), HMAC-SHA512(random^4096, data), HMAC-Skein512-512(random^4096, data), HMAC-Blake2b-512(random^4096, data))` with different randoms for each algorithm. Since it's HMAC the extra bytes over the block size does matter for security.
+
 #### Encrypted stream format
 The encrypted data is scattered around the image, but for simplicitys sake (to be able to verify security without relying on the shuffeling on data), the format is as follows:
 
@@ -138,7 +143,7 @@ The encrypted data is scattered around the image, but for simplicitys sake (to b
       <td>512 bits</td>
       <td>x</td>
       <td></td>
-      <td>A ED25519 signature of the checksum. This is put at the end since it's not required and to give full compatibility between signed and unsigned packages.</td>
+      <td>A ED25519 signature of the signature checksum. This is put at the end since it's not required and to give full compatibility between signed and unsigned packages.</td>
     </tr>
   </tbody>
 </table>
