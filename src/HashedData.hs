@@ -3,7 +3,8 @@
 module HashedData (writeAndHash, readUntilHash) where
 
 import Crypto.RandomMonad (getRandomByteStringM)
-import Crypto.Hash (Context, SHA1(..), hashDigestSize, hashUpdate, hashInit, hashFinalize, digestFromByteString)
+import Crypto.Hash (SHA1(..), hashDigestSize, digestFromByteString)
+import Crypto.MAC.HMAC (Context, update, initialize, finalize, hmacGetDigest)
 import Data.Bits (xor)
 import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives, bytesAvailable)
 
@@ -11,18 +12,19 @@ import qualified Data.ByteArray as BA
 import qualified Data.ByteString.Lazy as LBS
 
 writeAndHash pixels image input = do
-  hashPosition <- getCryptoPrimitives pixels (8 * (hashDigestSize SHA1))
-  hashSalt <- getRandomByteStringM 256
-  let hash' = hashUpdate (hashInit :: Context SHA1) $ LBS.toStrict hashSalt
+  let blockSize = hashDigestSize SHA1
+  hashPosition <- getCryptoPrimitives pixels (8 * blockSize)
+  hashSalt <- getRandomByteStringM $ fromIntegral blockSize
+  let hash' = initialize (LBS.toStrict hashSalt) :: Context SHA1
       writeAndHashRecursive input' h = if LBS.length input' == 0
-                                          then return $ hashFinalize h
+                                          then return $ finalize h
                                           else do
                                             let byte = LBS.singleton $ LBS.head input'
                                             writeBytes pixels image byte
                                             macXorBytes <- getRandomByteStringM 1
                                             let [macXorByte] = LBS.unpack macXorBytes
                                                 macByte = LBS.map (\x -> xor x macXorByte) byte
-                                                newHash = hashUpdate h $ LBS.toStrict macByte
+                                                newHash = update h $ LBS.toStrict macByte
                                             writeAndHashRecursive (LBS.tail input') newHash
   h <- writeAndHashRecursive input hash'
   let hash = LBS.pack $ BA.unpack h
@@ -30,11 +32,12 @@ writeAndHash pixels image input = do
   return h
 
 readUntilHash pixels image = do
-  hash <- readBytes pixels image (hashDigestSize SHA1)
-  hashSalt <- getRandomByteStringM 256
+  let blockSize = hashDigestSize SHA1
+  hash <- readBytes pixels image blockSize
+  hashSalt <- getRandomByteStringM $ fromIntegral blockSize
   let Just digest = digestFromByteString $ LBS.toStrict hash
-      hash' = hashUpdate (hashInit :: Context SHA1) $ LBS.toStrict hashSalt
-      readUntilHashMatch h readData = if hashFinalize h == digest
+      hash' = initialize (LBS.toStrict hashSalt) :: Context SHA1
+      readUntilHashMatch h readData = if (hmacGetDigest $ finalize h) == digest
                                          then return $ Just (LBS.pack $ reverse readData, hash)
                                          else bytesAvailable pixels >>= \bytesLeft ->
                                            if bytesLeft == 0
@@ -44,7 +47,7 @@ readUntilHash pixels image = do
                                                 macXorBytes <- getRandomByteStringM 1
                                                 let [macXorByte] = LBS.unpack macXorBytes
                                                     macByte = LBS.map (\x -> xor x macXorByte) b
-                                                    newHash = hashUpdate h $ LBS.toStrict macByte
+                                                    newHash = update h $ LBS.toStrict macByte
                                                 readUntilHashMatch newHash (LBS.head b:readData)
   readUntilHashMatch hash' []
 

@@ -88,10 +88,10 @@ When the receiver wants to receive data he simply reads `Spub` from the image an
 Notice that the Curve25519 shared key is 256 bits. This means that there will probably be ~128 bits changed. This is considerably smaller than for RSA and should be used to keep detection down.
 
 #### Encryption
-Using the pixel stream, write a 20 byte SHA1 hash sum of the data to be encrypted, and append the data. All data using the pixel stream is subject to the invertBit variable in the pixel stream, so both the SHA1 sum and the data is now encrypted.
+Using the pixel stream, write a 20 byte HMACSHA1 hash sum of the data to be encrypted, with a password from the random stream, and append the data. All data using the pixel stream is subject to the invertBit variable in the pixel stream, so both the HMACSHA1 sum and the data is now encrypted.
 
 #### Decryption
-Using the pixel stream, read out a 20 byte SHA1 hash sum from the image. Read out data byte by byte until the hash sum matches.
+Using the pixel stream, read out a 20 byte HMACSHA1 hash sum from the image and the password from the random stream. Read out data byte by byte until the hash sum matches.
 
 #### Encrypted stream format
 The encrypted data is scattered around the image, but for simplicitys sake (to be able to verify security without relying on the shuffeling on data), the format is as follows:
@@ -122,7 +122,7 @@ The encrypted data is scattered around the image, but for simplicitys sake (to b
       <td>160 bits</td>
       <td>x</td>
       <td>x</td>
-      <td>A single SHA1 hash sum of the form <code>SHA1(random(0..255)^256 || Enc(random, UserData))</code></td>
+      <td>A single HMACSHA1 hash sum of the form <code>HMACSHA1(random(0..255)^40, Enc(random, UserData))</code></td>
     </tr>
     <tr>
       <td>Data</td>
@@ -143,13 +143,13 @@ The encrypted data is scattered around the image, but for simplicitys sake (to b
   </tbody>
 </table>
 
-Worth noticing is that the SHA1 hash sum is done on a concatenation of a pseudo random 256 byte value and the user data encrypted with a seperate crypto key (fetched from the same pseudo random stream). This encryption of the user data is only used in this SHA1 sum and is then thrown away.
+Worth noticing is that the HMACSHA1 hash sum is done on with a password of exactly one block size to optimize speed and the user data encrypted with a seperate crypto key (fetched from the same pseudo random stream). This encryption of the user data is only used in this HMACSHA1 sum and is then thrown away.
 
 As you see in the previous table, the header for symmetric encryption is 160 bits long and leaks no information about the user data.
 
 The header for public key encryption will be the key size of the PKI key + 160 bits and leaks no information about the user data, since the symetric key generated from the PKI data adds to the encryption instead of replacing the encryption for the header and the data.
 
-As shown in the table, everything is encrypted with the symmetric key and there is no known data in the protocol (such as length fields or a boolean informing if there is a PKI encrypted key or not) which an attacker could try to use to gain more knowledge. Notice also that unlike this table there is no end of the User Data until every single pixel in the image has been used up, so without the encryption key it is not possible to know the exact length of the user data. An attack where the attacker is able to decrypt the data could ofcourse allow the attacker to guess the length based on the data it decrypts, but actually decrypting the data would require the attacker to hold the key mass which would also unlock the SHA1 MAC, so it's not viable to decrypt the data without being able to verify the data against the SHA1 MAC. Notice that it may be possible for the attacker could get a pretty good approximation of the length of the hidden data anyways, see Known weaknesses.
+As shown in the table, everything is encrypted with the symmetric key and there is no known data in the protocol (such as length fields or a boolean informing if there is a PKI encrypted key or not) which an attacker could try to use to gain more knowledge. Notice also that unlike this table there is no end of the User Data until every single pixel in the image has been used up, so without the encryption key it is not possible to know the exact length of the user data. An attack where the attacker is able to decrypt the data could ofcourse allow the attacker to guess the length based on the data it decrypts, but actually decrypting the data would require the attacker to hold the key mass which would also unlock the SHA1 HMAC, so it's not viable to decrypt the data without being able to verify the data against the SHA1 HMAC. Notice that it may be possible for the attacker could get a pretty good approximation of the length of the hidden data anyways, see Known weaknesses.
 
 ### Known weaknesses
 PBKDF2 is sensitive to SIMD brute force attacks, so in the future I will move away from it as my default PRNG.
