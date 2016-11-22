@@ -38,7 +38,7 @@ getPublicSignKey (PublicEccKeyWithEd _ key) = Just key
 publicKeyMagic = C8.pack "SteganographyPublicKey_v1: "
 secretKeyMagic = C8.pack "DO NOT EVER SHARE THIS FILE WITH ANYONE!\n\nSteganographySecretKey_v1: "
 
-encodeWithMagic magic d = BS.append magic $ C8.unwords $ map (\x -> B64.encode $ BS.pack x) d
+encodeWithMagic magic d = BS.append magic $ C8.unwords $ (\x -> B64.encode $ BS.pack x) <$> d
 
 decodeWithMagic magic d = let (corr, d') = BS.splitAt (BS.length magic) d
                               words' = words $ C8.unpack d'
@@ -47,7 +47,7 @@ decodeWithMagic magic d = let (corr, d') = BS.splitAt (BS.length magic) d
                                                      then let Right r = decoded in r
                                                      else BS.empty
                             in if corr == magic
-                                  then map (\var -> b64 $ C8.pack var) words'
+                                  then (\var -> b64 $ C8.pack var) <$> words'
                                   else []
 
 encodePublicKey :: PublicEccKey -> BS.ByteString

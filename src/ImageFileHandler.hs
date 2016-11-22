@@ -71,7 +71,7 @@ pngDynamicComponentCount x = pngDynamicMap (I.componentCount . \x -> I.pixelAt x
 
 readBits_ primitives image = BS.fromList $ read primitives
   where
-  read = map $ \p ->
+  read = fmap $ \p ->
     let CryptoPrimitive (x, y, c) inv = p
         x' = fromIntegral x
         y' = fromIntegral y
