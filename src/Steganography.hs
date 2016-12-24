@@ -3,11 +3,6 @@
 
 module Steganography (doEncrypt, doDecrypt, SteganographyExceptions(..)) where
 
-import CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature)
-import HashedData (readUntilHash, writeAndHash)
-import ImageFileHandler (pngDynamicMap, pngDynamicComponentCount, bytesAvailable)
-import Pbkdf2 (hmacSha512Pbkdf2)
-
 import Codec.Picture.Png (decodePngWithMetadata, encodePngWithMetadata, decodePng)
 import Codec.Picture.Types (dynamicMap, imageHeight, imageWidth, unsafeThawImage, unsafeFreezeImage)
 import Control.Exception (throw, Exception)
@@ -15,16 +10,20 @@ import Control.Monad.ST (runST, ST())
 import Control.Monad.Trans.Class (lift)
 import Control.Monad (when)
 import Crypto.RandomMonad (runRndT, newRandomElementST)
+import CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature)
 import Data.Array.ST (STArray(), newArray)
 import Data.Maybe (isJust)
 import Data.Typeable (Typeable)
 import Data.Word (Word8)
+import HashedData (readUntilHash, writeAndHash)
+import ImageFileHandler (pngDynamicMap, pngDynamicComponentCount, bytesAvailable)
+import Pbkdf2 (hmacSha512Pbkdf2)
 
-import qualified EccKeys
 import qualified Data.BitString as BS
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import qualified EccKeys
 import qualified PixelStream
 
 data SteganographyExceptions = NotEnoughSpaceInImageException { maxSize :: Int }

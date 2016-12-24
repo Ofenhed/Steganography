@@ -4,9 +4,9 @@
 module HashedData (writeAndHash, readUntilHash) where
 
 import Control.Monad.ST (ST)
-import Crypto.RandomMonad (getRandomByteStringM, RndT)
 import Crypto.Hash (SHA1(..), SHA3_512, SHA512, Skein512_512, Blake2b_512, hashDigestSize, digestFromByteString, HashAlgorithm)
 import Crypto.MAC.HMAC (Context, update, initialize, finalize, hmacGetDigest)
+import Crypto.RandomMonad (getRandomByteStringM, RndT)
 import Data.Bits (xor)
 import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives, bytesAvailable)
 

@@ -3,17 +3,17 @@
 
 module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException, DifferentBetweenSizeOfPrimitivesAndDataLength), bitsAvailable, bytesAvailable) where
 
-import Crypto.RandomMonad (getRandomElement, RndST, getRandomM, randomElementsLength, RandomElementsListST())
 import Codec.Picture.Png (PngSavable)
 import Control.Exception (throw, Exception)
 import Control.Monad (forM, forM_, when)
+import Control.Monad.ST (ST())
 import Control.Monad.Trans.Class (lift)
+import Crypto.RandomMonad (getRandomElement, RndST, getRandomM, randomElementsLength, RandomElementsListST())
+import Data.Array.ST (STArray(), getBounds, writeArray, readArray)
 import Data.Bits (Bits, xor, shift, (.&.), complement, (.|.))
 import Data.Typeable (Typeable)
 import Data.Word (Word8)
 import PixelStream (Pixel)
-import Control.Monad.ST (ST())
-import Data.Array.ST (STArray(), getBounds, writeArray, readArray)
 
 import qualified Codec.Picture.Types as I
 import qualified Data.BitString as BS
