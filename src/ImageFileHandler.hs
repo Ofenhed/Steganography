@@ -6,7 +6,7 @@ module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_
 import Crypto.RandomMonad (getRandomElement, RndST, getRandomM, randomElementsLength, RandomElementsListST())
 import Codec.Picture.Png (PngSavable)
 import Control.Exception (throw, Exception)
-import Control.Monad (forM, forM_)
+import Control.Monad (forM, forM_, when)
 import Control.Monad.Trans.Class (lift)
 import Data.Bits (Bits, xor, shift, (.&.), complement, (.|.))
 import Data.Typeable (Typeable)
@@ -22,7 +22,7 @@ import qualified Data.ByteString.Lazy as ByS
 data CryptoPrimitive = CryptoPrimitive (PixelStream.Pixel) (Bool) deriving (Show)
 type CryptoStream = [CryptoPrimitive]
 
-type PixelInfo s = (RandomElementsListST s Pixel, STArray s (Integer, Integer, Integer) Bool)
+type PixelInfo s = (RandomElementsListST s Pixel, STArray s (Int, Int, Int) Bool)
 
 getCryptoPrimitives :: PixelInfo s -> Int -> RndST s CryptoStream
 getCryptoPrimitives (pixels,_) count = do
@@ -40,7 +40,8 @@ getRandomBoolM = do
                      _ -> error "Incorrent response from getRandomM"
 
 data ImageFileHandlerExceptions = UnsupportedFormatException |
-                                  DifferentBetweenSizeOfPrimitivesAndDataLength
+                                  DifferentBetweenSizeOfPrimitivesAndDataLength |
+                                  OutOfPixelsInSaferMode
                                   deriving (Show, Typeable)
 instance Exception ImageFileHandlerExceptions
 
@@ -113,7 +114,71 @@ readSalt pixels@(_,pixelStatus) image count = read [0..count-1] >>= return . ByS
     _ <- getRandomM $ fromIntegral result''
     return result''
 
-writeBits_ primitives pixels image bits = if length primitives >= (fromIntegral $ BS.length bits)
+generateSeekPattern image x y = do
+  let w = I.mutableImageWidth image
+      h = I.mutableImageHeight image
+      generateSeekPattern' distance
+       | distance > max w h = []
+       | otherwise = all ++ (generateSeekPattern' $ distance + 1)
+        where
+        all = [(x' :: Int, y' :: Int) | x' <- [x - distance..x + distance], y' <- [y - distance..y + distance], max (abs $ x - x') (abs $ y - y') == distance &&
+                                                                                                                          min x' y' >= 0 &&
+                                                                                                                          x' < w &&
+                                                                                                                          y' < h]
+  generateSeekPattern' 1
+
+findM f [] = return Nothing
+findM f (x:xs) = do
+  isTarget <- f x
+  if isTarget
+     then return $ Just x
+     else findM f xs
+
+writeBitsSafer (_, usedPixels) image x y color newBit = do
+  ((_, _, cl), (_, _, ch)) <- getBounds usedPixels
+  when (cl /= 0) $ error "Missformed bounds on pixel status"
+
+  originalPixel <- I.readPixel image x y
+  let newPixel = I.mixWith (\color' value _ ->
+        if color' == color
+           then (value .&. (complement 1)) .|. newBit
+           else value) originalPixel originalPixel
+
+  writeArray usedPixels (x, y, color) True
+  when (originalPixel /= newPixel) $ do
+    sourceSensitivity <- mapM (\color' -> readArray usedPixels (x, y, color') >>= return) [cl..ch]
+
+    let validPixel = I.mixWith (\_ _ _ -> 1) originalPixel originalPixel
+        overwritePixelLsb = I.mixWith (\_ value value2 -> (value .&. (complement 1)) .|. (value2 .&. 1))
+
+        canGo pixel1 pixel2 sensitivity = do
+          let possiblePixel = I.mixWith (\color' source dest -> let isUsed = sensitivity !! color'
+                                                                 in if (not isUsed) || source .&. 1 == dest .&. 1
+                                                                       then 1
+                                                                       else 0) pixel1 pixel2
+          return $ possiblePixel == validPixel
+
+        usable (x', y') = do
+          targetSensitivity <- mapM (\color' -> readArray usedPixels (x', y', color') >>= return) [cl..ch]
+          otherPixel <- I.readPixel image x' y'
+          targetValid <- canGo originalPixel otherPixel targetSensitivity
+          sourceValid <- canGo otherPixel newPixel sourceSensitivity
+          return $ targetValid && sourceValid
+
+    foundIt <- findM usable $ generateSeekPattern image x y
+
+    case foundIt of
+         Nothing -> throw OutOfPixelsInSaferMode
+         Just (x', y') -> do
+           otherPixel <- I.readPixel image x' y'
+           currentPixel <- I.readPixel image x y
+           let newOtherPixel = overwritePixelLsb otherPixel currentPixel
+               newCurrentPixel = overwritePixelLsb currentPixel otherPixel
+           I.writePixel image x y newCurrentPixel
+           I.writePixel image x' y' newOtherPixel
+  
+
+writeBits_ primitives pixels@(_, pixelStatus) image bits = if length primitives >= (fromIntegral $ BS.length bits)
                                              then forM_ (zipWith (\p b -> (p, b)) primitives (BS.toList bits)) inner
                                              else error "Got more data that crypto primitives"
   where
@@ -123,12 +188,16 @@ writeBits_ primitives pixels image bits = if length primitives >= (fromIntegral 
         y' = fromIntegral y
         newBit = case xor inv bit of True -> 1
                                      False -> 0
-    pixel <- I.readPixel image x' y'
-    let pixel' = I.mixWith (\color value _ ->
-          if color == fromIntegral c
-             then (value .&. (complement 1)) .|. newBit
-             else value) pixel pixel
-    I.writePixel image x' y' pixel'
+    if False
+       then do
+         pixel <- I.readPixel image x' y'
+         let pixel' = I.mixWith (\color value _ ->
+               if color == fromIntegral c
+                  then (value .&. (complement 1)) .|. newBit
+                  else value) pixel pixel
+         I.writePixel image x' y' pixel'
+         writeArray pixelStatus (x', y', fromIntegral c) True
+       else writeBitsSafer pixels image x' y' (fromIntegral c) newBit
 
 writeBytes_ primitives pixels image bytes = lift $ writeBits_ primitives pixels image $ BS.bitStringLazy bytes
 

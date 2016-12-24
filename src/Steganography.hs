@@ -54,7 +54,7 @@ doEncrypt imageFile secretFile loops inputFile salt pkiFile signFile = do
           h = dynamicMap imageHeight dynamicImage
           colors = fromIntegral $ pngDynamicComponentCount dynamicImage :: Word8
       pixels'1 <- lift $ newRandomElementST $ PixelStream.getPixels (fromIntegral w) (fromIntegral h) colors
-      pixels'2 <- lift $ (newArray ((0, 0, 0), (fromIntegral w - 1, fromIntegral h - 1, fromIntegral colors - 1)) False :: ST s (STArray s (Integer, Integer, Integer) Bool))
+      pixels'2 <- lift $ (newArray ((0, 0, 0), (fromIntegral w - 1, fromIntegral h - 1, fromIntegral colors - 1)) False :: ST s (STArray s (Int, Int, Int) Bool))
       let pixels = (pixels'1, pixels'2)
       createRandomStates pixels dynamicImage salt secretLength
       addAdditionalPublicPkiState publicKeyState pixels mutableImage
@@ -78,7 +78,7 @@ doDecrypt imageFile secretFile loops output salt pkiFile signFile = do
       colors = fromIntegral $ pngDynamicComponentCount dynamicImage :: Word8
       (r,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ do
               pixels'1 <- lift $ newRandomElementST $ PixelStream.getPixels (fromIntegral w) (fromIntegral h) colors
-              pixels'2 <- lift $ (newArray ((0, 0, 0), (fromIntegral w - 1, fromIntegral h - 1, fromIntegral colors - 1)) False :: ST s (STArray s (Integer, Integer, Integer) Bool))
+              pixels'2 <- lift $ (newArray ((0, 0, 0), (fromIntegral w - 1, fromIntegral h - 1, fromIntegral colors - 1)) False :: ST s (STArray s (Int, Int, Int) Bool))
               let pixels = (pixels'1, pixels'2)
               createRandomStates pixels dynamicImage salt $ fromIntegral $ LBS.length secret
               addAdditionalPrivatePkiState privateKey pixels dynamicImage
