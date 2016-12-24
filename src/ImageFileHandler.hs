@@ -3,7 +3,7 @@
 
 module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException, DifferentBetweenSizeOfPrimitivesAndDataLength), bitsAvailable, bytesAvailable) where
 
-import Crypto.RandomMonad (getRandomElement, RndST, getRandomM, randomElementsLength)
+import Crypto.RandomMonad (getRandomElement, RndST, getRandomM, randomElementsLength, RandomElementsListST())
 import Codec.Picture.Png (PngSavable)
 import Control.Exception (throw, Exception)
 import Control.Monad (forM, forM_)
@@ -12,6 +12,8 @@ import Data.Bits (Bits, xor, shift, (.&.), complement, (.|.))
 import Data.Typeable (Typeable)
 import Data.Word (Word8)
 import PixelStream (Pixel)
+import Control.Monad.ST (ST())
+import Data.Array.ST (STArray(), getBounds, writeArray, readArray)
 
 import qualified Codec.Picture.Types as I
 import qualified Data.BitString as BS
@@ -20,7 +22,10 @@ import qualified Data.ByteString.Lazy as ByS
 data CryptoPrimitive = CryptoPrimitive (PixelStream.Pixel) (Bool) deriving (Show)
 type CryptoStream = [CryptoPrimitive]
 
-getCryptoPrimitives pixels count = do
+type PixelInfo s = (RandomElementsListST s Pixel, STArray s (Integer, Integer, Integer) Bool)
+
+getCryptoPrimitives :: PixelInfo s -> Int -> RndST s CryptoStream
+getCryptoPrimitives (pixels,_) count = do
   read <- forM [1..count] $ \_ -> do
     pixel <- getRandomElement pixels
     inv <- getRandomBoolM
@@ -69,7 +74,7 @@ pngDynamicComponentCount (I.ImageRGBA8 i) = ((I.componentCount . \x -> I.pixelAt
 pngDynamicComponentCount (I.ImageRGBA16 i) = ((I.componentCount . \x -> I.pixelAt x 0 0) i) - 1
 pngDynamicComponentCount x = pngDynamicMap (I.componentCount . \x -> I.pixelAt x 0 0) x
 
-readBits_ primitives image = BS.fromList $ read primitives
+readBits_ primitives pixels image = BS.fromList $ read primitives
   where
   read = fmap $ \p ->
     let CryptoPrimitive (x, y, c) inv = p
@@ -82,7 +87,8 @@ readBits_ primitives image = BS.fromList $ read primitives
                       0 -> False
                       _ -> error "(_ & 1) returned something else than 0 or 1."
 
-readSalt pixels image count = read [0..count-1] >>= return . ByS.pack
+readSalt :: PixelInfo s -> I.DynamicImage -> Int -> RndST s ByS.ByteString
+readSalt pixels@(_,pixelStatus) image count = read [0..count-1] >>= return . ByS.pack
   where
   read = mapM $ \_ -> do
     [CryptoPrimitive (x, y, c) inv] <- getCryptoPrimitives pixels 1
@@ -98,6 +104,8 @@ readSalt pixels image count = read [0..count-1] >>= return . ByS.pack
         result'' = if inv
                       then complement result'
                       else result'
+    ((_, _, c1), (_, _, c2)) <- lift $ getBounds pixelStatus
+    lift $ mapM_ (\c'' -> writeArray pixelStatus (fromIntegral x', fromIntegral y', fromIntegral c'') True) [c1..c2]
     -- This will throw away bits until a number between 0 and result'' is
     -- found. This means that this function will not only return a salt,
     -- but also salt the current crypto stream by throwing away a random
@@ -105,9 +113,9 @@ readSalt pixels image count = read [0..count-1] >>= return . ByS.pack
     _ <- getRandomM $ fromIntegral result''
     return result''
 
-writeBits_ primitives image bits = if length primitives >= (fromIntegral $ BS.length bits)
-                                      then forM_ (zipWith (\p b -> (p, b)) primitives (BS.toList bits)) inner
-                                      else error "Got more data that crypto primitives"
+writeBits_ primitives pixels image bits = if length primitives >= (fromIntegral $ BS.length bits)
+                                             then forM_ (zipWith (\p b -> (p, b)) primitives (BS.toList bits)) inner
+                                             else error "Got more data that crypto primitives"
   where
   inner (p, bit) = do
     let CryptoPrimitive (x, y, c) inv = p
@@ -122,21 +130,21 @@ writeBits_ primitives image bits = if length primitives >= (fromIntegral $ BS.le
              else value) pixel pixel
     I.writePixel image x' y' pixel'
 
-writeBytes_ primitives image bytes = lift $ writeBits_ primitives image $ BS.bitStringLazy bytes
+writeBytes_ primitives pixels image bytes = lift $ writeBits_ primitives pixels image $ BS.bitStringLazy bytes
 
 readBits pixels image count = do
   primitives <- getCryptoPrimitives pixels count
-  return $ readBits_ primitives image
+  return $ readBits_ primitives pixels image
 
 readBytes pixels image count = do
   a <- readBits pixels image $ count * 8
   return $ BS.realizeBitStringLazy a
 
 writeBits pixels image bits = do
-  primitives <- getCryptoPrimitives pixels $ BS.length bits
-  lift $ writeBits_ primitives image bits
+  primitives <- getCryptoPrimitives pixels $ fromIntegral $ BS.length bits
+  lift $ writeBits_ primitives pixels image bits
 
 writeBytes pixels image bytes = writeBits pixels image $ BS.bitStringLazy bytes
 
-bitsAvailable pixels = randomElementsLength pixels
-bytesAvailable pixels = randomElementsLength pixels >>= \bits -> return $ quot bits 8
+bitsAvailable (unused,_) = randomElementsLength unused
+bytesAvailable (unused,_) = randomElementsLength unused >>= \bits -> return $ quot bits 8

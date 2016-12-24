@@ -132,7 +132,7 @@ addSignature (Just (PrivatePkiEcc key)) msg pixels image = do
          signatureSalt <- getRandomByteStringM 64
          let toSign = BS.pack $ (LBS.unpack signatureSalt) ++  msg
              signature = ED.sign k (ED.toPublic k) toSign
-         writeBytes_ hashPosition image (LBS.pack $ BA.unpack signature)
+         writeBytes_ hashPosition pixels image (LBS.pack $ BA.unpack signature)
 
 createVerifySignatureState filename = do
   key <- createPublicKeyState filename

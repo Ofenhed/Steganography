@@ -64,7 +64,7 @@ writeAndHash pixels image input = do
                                                 writeAndHashRecursive (LBS.tail input') newHash newSign
   (h1, h2) <- writeAndHashRecursive input hash' bigHashes
   let hash = LBS.pack $ BA.unpack h1
-  writeBytes_ hashPosition image hash
+  writeBytes_ hashPosition pixels image hash
   return h2
 
 readUntilHash pixels image = do
