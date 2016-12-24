@@ -170,10 +170,9 @@ writeBitsSafer (_, usedPixels) image x y color newBit = do
     case foundIt of
          Nothing -> throw OutOfPixelsInSaferMode
          Just (x', y') -> do
-           otherPixel <- I.readPixel image x' y'
            currentPixel <- I.readPixel image x y
-           let newOtherPixel = overwritePixelLsb otherPixel currentPixel
-               newCurrentPixel = overwritePixelLsb currentPixel otherPixel
+           let newOtherPixel = overwritePixelLsb originalPixel currentPixel
+               newCurrentPixel = overwritePixelLsb currentPixel originalPixel
            I.writePixel image x y newCurrentPixel
            I.writePixel image x' y' newOtherPixel
   
