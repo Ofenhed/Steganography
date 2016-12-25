@@ -22,7 +22,7 @@ import qualified Data.ByteString.Lazy as ByS
 data CryptoPrimitive = CryptoPrimitive (PixelStream.Pixel) (Bool) deriving (Show)
 type CryptoStream = [CryptoPrimitive]
 
-type PixelInfo s = (RandomElementsListST s Pixel, STArray s (Int, Int, Int) Bool)
+type PixelInfo s = (RandomElementsListST s Pixel, STArray s (Int, Int) [Bool])
 
 getCryptoPrimitives :: PixelInfo s -> Int -> RndST s CryptoStream
 getCryptoPrimitives (pixels,_) count = do
@@ -105,8 +105,8 @@ readSalt pixels@(_,pixelStatus) image count = read [0..count-1] >>= return . ByS
         result'' = if inv
                       then complement result'
                       else result'
-    ((_, _, c1), (_, _, c2)) <- lift $ getBounds pixelStatus
-    lift $ mapM_ (\c'' -> writeArray pixelStatus (fromIntegral x', fromIntegral y', fromIntegral c'') True) [c1..c2]
+    prev <- lift $ readArray pixelStatus (fromIntegral x', fromIntegral y')
+    lift $ writeArray pixelStatus (fromIntegral x', fromIntegral y') $ map (\_ -> True) prev
     -- This will throw away bits until a number between 0 and result'' is
     -- found. This means that this function will not only return a salt,
     -- but also salt the current crypto stream by throwing away a random
@@ -136,9 +136,7 @@ findM f (x:xs) = do
      else findM f xs
 
 writeBitsSafer (_, usedPixels) image@(I.MutableImage { I.mutableImageData = arr }) x y color newBit = do
-  ((_, _, cl), (_, _, ch)) <- getBounds usedPixels
   let unsafeReadPixel x' y' = I.unsafeReadPixel arr $ I.mutablePixelBaseIndex image x' y'
-  when (cl /= 0) $ error "Missformed bounds on pixel status"
 
   originalPixel <- unsafeReadPixel x y
   let newPixel = I.mixWith (\color' value _ ->
@@ -146,9 +144,12 @@ writeBitsSafer (_, usedPixels) image@(I.MutableImage { I.mutableImageData = arr 
            then (value .&. (complement 1)) .|. newBit
            else value) originalPixel originalPixel
 
-  writeArray usedPixels (x, y, color) True
+  sourceSensitivity' <- readArray usedPixels (x, y)
+  let sourceSensitivity = zipWith (\prev index -> if index == color
+                                                     then True
+                                                     else prev) sourceSensitivity' [0..]
+  writeArray usedPixels (x, y) sourceSensitivity
   when (originalPixel /= newPixel) $ do
-    sourceSensitivity <- mapM (\color' -> readArray usedPixels (x, y, color') >>= return) [cl..ch]
 
     let validPixel = I.mixWith (\_ _ _ -> 1) originalPixel originalPixel
         overwritePixelLsb = I.mixWith (\_ value value2 -> (value .&. (complement 1)) .|. (value2 .&. 1))
@@ -161,11 +162,14 @@ writeBitsSafer (_, usedPixels) image@(I.MutableImage { I.mutableImageData = arr 
           return $ possiblePixel == validPixel
 
         usable (x', y') = do
-          targetSensitivity <- mapM (\color' -> readArray usedPixels (x', y', color') >>= return) [cl..ch]
           otherPixel <- unsafeReadPixel x' y'
-          targetValid <- canGo originalPixel otherPixel targetSensitivity
           sourceValid <- canGo otherPixel newPixel sourceSensitivity
-          return $ targetValid && sourceValid
+          if sourceValid
+             then do
+               targetSensitivity <- readArray usedPixels (x', y')
+               targetValid <- canGo originalPixel otherPixel targetSensitivity
+               return targetValid
+             else return False
 
     foundIt <- findM usable $ generateSeekPattern image x y
 
@@ -197,7 +201,6 @@ writeBits_ primitives pixels@(_, pixelStatus) image bits = if length primitives 
                   then (value .&. (complement 1)) .|. newBit
                   else value) pixel pixel
          I.writePixel image x' y' pixel'
-         writeArray pixelStatus (x', y', fromIntegral c) True
        else writeBitsSafer pixels image x' y' (fromIntegral c) newBit
 
 writeBytes_ primitives pixels image bytes = lift $ writeBits_ primitives pixels image $ BS.bitStringLazy bytes
