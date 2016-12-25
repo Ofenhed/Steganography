@@ -121,10 +121,11 @@ generateSeekPattern image x y = do
        | distance > max w h = []
        | otherwise = all ++ (generateSeekPattern' $ distance + 1)
         where
-        all = [(x' :: Int, y' :: Int) | x' <- [x - distance..x + distance], y' <- [y - distance..y + distance], max (abs $ x - x') (abs $ y - y') == distance &&
-                                                                                                                          min x' y' >= 0 &&
-                                                                                                                          x' < w &&
-                                                                                                                          y' < h]
+        left = [(x - distance :: Int, y' :: Int) | y' <- y : ([y+1..y+distance] ++ [y-1..y-distance])]
+        right = [(x + distance, y') | (_, y') <- left]
+        top = [(x' :: Int, y - distance :: Int) | x' <- [x-distance+1..x+distance-1]]
+        bottom = [(x' :: Int, y + distance :: Int) | (x', _) <- top]
+        all = [(x', y') | (x', y') <- left ++ right ++ top ++ bottom, x' < w && y' < h && min x' y' >= 0]
   generateSeekPattern' 1
 
 findM f [] = return Nothing
@@ -134,11 +135,12 @@ findM f (x:xs) = do
      then return $ Just x
      else findM f xs
 
-writeBitsSafer (_, usedPixels) image x y color newBit = do
+writeBitsSafer (_, usedPixels) image@(I.MutableImage { I.mutableImageData = arr }) x y color newBit = do
   ((_, _, cl), (_, _, ch)) <- getBounds usedPixels
+  let unsafeReadPixel x' y' = I.unsafeReadPixel arr $ I.mutablePixelBaseIndex image x' y'
   when (cl /= 0) $ error "Missformed bounds on pixel status"
 
-  originalPixel <- I.readPixel image x y
+  originalPixel <- unsafeReadPixel x y
   let newPixel = I.mixWith (\color' value _ ->
         if color' == color
            then (value .&. (complement 1)) .|. newBit
@@ -160,7 +162,7 @@ writeBitsSafer (_, usedPixels) image x y color newBit = do
 
         usable (x', y') = do
           targetSensitivity <- mapM (\color' -> readArray usedPixels (x', y', color') >>= return) [cl..ch]
-          otherPixel <- I.readPixel image x' y'
+          otherPixel <- unsafeReadPixel x' y'
           targetValid <- canGo originalPixel otherPixel targetSensitivity
           sourceValid <- canGo otherPixel newPixel sourceSensitivity
           return $ targetValid && sourceValid
@@ -170,9 +172,9 @@ writeBitsSafer (_, usedPixels) image x y color newBit = do
     case foundIt of
          Nothing -> throw OutOfPixelsInSaferMode
          Just (x', y') -> do
-           currentPixel <- I.readPixel image x y
-           let newOtherPixel = overwritePixelLsb originalPixel currentPixel
-               newCurrentPixel = overwritePixelLsb currentPixel originalPixel
+           otherPixel <- unsafeReadPixel x' y'
+           let newOtherPixel = overwritePixelLsb otherPixel originalPixel
+               newCurrentPixel = overwritePixelLsb originalPixel otherPixel
            I.writePixel image x y newCurrentPixel
            I.writePixel image x' y' newOtherPixel
   
