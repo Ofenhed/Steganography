@@ -3,6 +3,8 @@ This app will hide data in images based on a shared key and a predetermined encr
 
 Notice: This is pretty much just a project I created to learn Haskell, and while the crypto is strong the steganography is not!
 
+Notice: I've greatly reduced the performance of the encrypter, but in a way which may secure the hidden data from Steganalysis. I will make these changes optional in a future update.
+
 ## Maintaining security
 To maintain security with this application, the following needs to be true.
 * The picutre you are using **must** used for the sole purpose of hiding data once, or it would be obvious for someone looking at the picture that it contains hidden data.
