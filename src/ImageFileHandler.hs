@@ -11,6 +11,7 @@ import Control.Monad.Trans.Class (lift)
 import Crypto.RandomMonad (getRandomElement, RndST, getRandomM, randomElementsLength, RandomElementsListST())
 import Data.Array.ST (STArray(), getBounds, writeArray, readArray)
 import Data.Bits (Bits, xor, shift, (.&.), complement, (.|.))
+import Data.Maybe (isNothing, isJust, fromJust)
 import Data.Typeable (Typeable)
 import Data.Word (Word8)
 import PixelStream (Pixel)
@@ -22,7 +23,7 @@ import qualified Data.ByteString.Lazy as ByS
 data CryptoPrimitive = CryptoPrimitive (PixelStream.Pixel) (Bool) deriving (Show)
 type CryptoStream = [CryptoPrimitive]
 
-type PixelInfo s = (RandomElementsListST s Pixel, STArray s (Int, Int) [Bool])
+type PixelInfo s = (RandomElementsListST s Pixel, Maybe (STArray s (Int, Int) [Bool]))
 
 getCryptoPrimitives :: PixelInfo s -> Int -> RndST s CryptoStream
 getCryptoPrimitives (pixels,_) count = do
@@ -105,8 +106,9 @@ readSalt pixels@(_,pixelStatus) image count = read [0..count-1] >>= return . ByS
         result'' = if inv
                       then complement result'
                       else result'
-    prev <- lift $ readArray pixelStatus (fromIntegral x', fromIntegral y')
-    lift $ writeArray pixelStatus (fromIntegral x', fromIntegral y') $ map (\_ -> True) prev
+    lift $ when (isJust pixelStatus) $ do
+      prev <- readArray (fromJust pixelStatus) (fromIntegral x', fromIntegral y')
+      writeArray (fromJust pixelStatus) (fromIntegral x', fromIntegral y') $ map (\_ -> True) prev
     -- This will throw away bits until a number between 0 and result'' is
     -- found. This means that this function will not only return a salt,
     -- but also salt the current crypto stream by throwing away a random
@@ -135,7 +137,7 @@ findM f (x:xs) = do
      then return $ Just x
      else findM f xs
 
-writeBitsSafer (_, usedPixels) image@(I.MutableImage { I.mutableImageData = arr }) x y color newBit = do
+writeBitsSafer (_, Just usedPixels) image@(I.MutableImage { I.mutableImageData = arr }) x y color newBit = do
   let unsafeReadPixel x' y' = I.unsafeReadPixel arr $ I.mutablePixelBaseIndex image x' y'
 
   originalPixel <- unsafeReadPixel x y
@@ -193,7 +195,7 @@ writeBits_ primitives pixels@(_, pixelStatus) image bits = if length primitives 
         y' = fromIntegral y
         newBit = case xor inv bit of True -> 1
                                      False -> 0
-    if False
+    if isNothing pixelStatus
        then do
          pixel <- I.readPixel image x' y'
          let pixel' = I.mixWith (\color value _ ->
