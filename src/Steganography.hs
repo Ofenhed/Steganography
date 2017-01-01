@@ -7,12 +7,14 @@ import Codec.Picture.Png (decodePngWithMetadata, encodePngWithMetadata, decodePn
 import Codec.Picture.Types (dynamicMap, imageHeight, imageWidth, unsafeThawImage, unsafeFreezeImage)
 import Control.Exception (throw, Exception)
 import Control.Monad.ST (runST, ST())
+import Control.Monad.ST.Unsafe (unsafeIOToST)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad (when)
 import Crypto.RandomMonad (runRndT, newRandomElementST)
 import CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature)
 import Data.Array.ST (STArray(), newArray)
 import Data.Maybe (isJust)
+import Data.Time (getCurrentTime, diffUTCTime, UTCTime, secondsToDiffTime)
 import Data.Typeable (Typeable)
 import Data.Word (Word8)
 import HashedData (readUntilHash, writeAndHash)
@@ -25,6 +27,8 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified EccKeys
 import qualified PixelStream
+
+warnIfFasterThanSeconds = 5
 
 data SteganographyExceptions = NotEnoughSpaceInImageException { maxSize :: Int }
                                | NoHiddenDataFoundException
@@ -55,7 +59,15 @@ doEncrypt imageFile secretFile loops inputFile salt pkiFile signFile fastMode = 
       pixels'1 <- lift $ newRandomElementST $ PixelStream.getPixels (fromIntegral w) (fromIntegral h) colors
       pixels'2 <- lift $ (newArray ((0, 0), (fromIntegral w - 1, fromIntegral h - 1)) $ map (\_ -> False) [1..fromIntegral colors] :: ST s (STArray s (Int, Int) [Bool]))
       let pixels = (pixels'1, if fastMode then Nothing else Just pixels'2)
-      createRandomStates pixels dynamicImage salt secretLength
+
+      do -- Unsafe operations in their own block to assure that nothing leaks
+        timeBefore <- lift $ unsafeIOToST getCurrentTime
+        createRandomStates pixels dynamicImage salt secretLength
+        timeAfter <- lift $ unsafeIOToST getCurrentTime
+        let duration = diffUTCTime timeAfter timeBefore
+        lift $ unsafeIOToST $ putStrLn $ "Creating crypto context took " ++ (show $ duration)
+        when (duration < fromInteger warnIfFasterThanSeconds) $ lift $ unsafeIOToST $ putStrLn $ "This should take at least " ++ (show warnIfFasterThanSeconds) ++ " seconds. You should either change to a longer key or increase the iteration count."
+
       addAdditionalPublicPkiState publicKeyState pixels mutableImage
       let dataLen = LBS.length input
       availLen <- bytesAvailable pixels
