@@ -1,13 +1,14 @@
+{-# LANGUAGE Trustworthy #-}
 module AesEngine (createAes256RngState) where
 
 import Crypto.Cipher.AES (AES256)
 import Crypto.Cipher.Types (IV, cipherInit, blockSize, nullIV, ctrCombine, ivAdd)
-import Crypto.Error (CryptoFailable(CryptoPassed))
-import Crypto.RandomMonad (RndState)
+import safe Crypto.Error (CryptoFailable(CryptoPassed))
+import safe Crypto.RandomMonad (RndState)
 
-import qualified Data.ByteString.Lazy as ByS
-import qualified Data.ByteString as BySS
 import qualified Data.BitString as BS
+import safe qualified Data.ByteString as BySS
+import safe qualified Data.ByteString.Lazy as ByS
 
 createAes256RngState :: BySS.ByteString
                         -- ^ @aesKey@

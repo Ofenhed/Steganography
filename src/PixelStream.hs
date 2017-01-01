@@ -1,6 +1,7 @@
+{-# LANGUAGE Safe #-}
 module PixelStream (getPixels, Pixel) where
 
-import Data.Word (Word32, Word8)
+import safe Data.Word (Word32, Word8)
 
 type Pixel = (Word32, Word32, Word8)
 

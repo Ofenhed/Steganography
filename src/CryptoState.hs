@@ -1,21 +1,22 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE Trustworthy #-}
 
 module CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature) where
 
-import AesEngine (createAes256RngState)
 import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives, readSalt, pngDynamicMap)
-import Pbkdf2 (hmacSha512Pbkdf2)
+import safe AesEngine (createAes256RngState)
+import safe Pbkdf2 (hmacSha512Pbkdf2)
 
 import Codec.Picture.Types (imageWidth, imageHeight)
-import Control.Exception (Exception, throw)
-import Crypto.Error (CryptoFailable(CryptoPassed))
 import Crypto.Hash (SHA3_256(..), hashDigestSize)
 import Crypto.PubKey.RSA.Types (private_size, Error(MessageTooLong), public_size)
 import Crypto.Random.Entropy (getEntropy)
-import Crypto.RandomMonad (replaceSeedM, addSeedM, getRandomByteStringM)
-import Data.Maybe (isNothing, isJust, fromJust)
-import Data.Typeable (Typeable)
-import Data.Word (Word8)
+import safe Control.Exception (Exception, throw)
+import safe Crypto.Error (CryptoFailable(CryptoPassed))
+import safe Crypto.RandomMonad (replaceSeedM, addSeedM, getRandomByteStringM)
+import safe Data.Maybe (isNothing, isJust, fromJust)
+import safe Data.Typeable (Typeable)
+import safe Data.Word (Word8)
 
 import qualified Crypto.PubKey.Curve25519 as Curve
 import qualified Crypto.PubKey.Ed25519 as ED
@@ -23,11 +24,11 @@ import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.PubKey.RSA.OAEP as OAEP
 import qualified Data.BitString as BiS
 import qualified Data.ByteArray as BA
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as LBS
-import qualified Data.ByteString.Lazy.Char8 as C8
 import qualified EccKeys
 import qualified PemData (readPublicKey, readPrivateKey)
+import safe qualified Data.ByteString as BS
+import safe qualified Data.ByteString.Lazy as LBS
+import safe qualified Data.ByteString.Lazy.Char8 as C8
 
 oaepParams = OAEP.defaultOAEPParams SHA3_256
 
