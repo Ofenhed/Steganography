@@ -43,18 +43,19 @@ data PrivatePki = PrivatePkiRsa RSA.PrivateKey
 data PublicPki = PublicPkiRsa ([Word8], [Word8], RSA.PublicKey)
                | PublicPkiEcc EccKeys.SecretEccKey EccKeys.PublicEccKey
 
-readPrivateKey [] = return Nothing
-readPrivateKey filename = do
-  rsaKey <- PemData.readPrivateKey filename
-  eccKey <- EccKeys.readSecretKey (EccKeys.SecretKeyPath filename)
-  if isJust rsaKey
-     then return $ Just $ PrivatePkiRsa $ fromJust rsaKey
-     else if isJust eccKey
-             then return $ Just $ PrivatePkiEcc $ fromJust eccKey
-             else throw CouldNotReadPkiFileException
+readPrivateKey fileData
+  | fileData == BS.empty = Nothing
+  | otherwise = do
+    let rsaKey = PemData.readPrivateKey $ LBS.fromStrict fileData
+    let eccKey = EccKeys.decodeSecretKey fileData
+    if isJust rsaKey
+       then Just $ PrivatePkiRsa $ fromJust rsaKey
+       else if isJust eccKey
+               then Just $ PrivatePkiEcc $ fromJust eccKey
+               else throw CouldNotReadPkiFileException
 
-createPublicRsaKeyState filename = do
-  privateKey <- PemData.readPublicKey filename
+createPublicRsaKeyState fileData = do
+  privateKey <- PemData.readPublicKey fileData
   if isNothing privateKey
      then return Nothing
      else do
@@ -63,23 +64,24 @@ createPublicRsaKeyState filename = do
        secret <- getEntropy $ public_size a
        return $ Just (BS.unpack seed, BS.unpack secret, a)
 
-createPublicEccKeyState filename = do
-  eccKey <- EccKeys.readPublicKey (EccKeys.PublicKeyPath filename)
+createPublicEccKeyState fileData = do
+  let eccKey = EccKeys.decodePublicKey fileData
   if isNothing eccKey
-     then return Nothing
+     then return $ Nothing
      else do
        secret <- EccKeys.generateSecretKey
        return $ Just $ PublicPkiEcc secret (fromJust eccKey)
 
-createPublicKeyState [] = return Nothing
-createPublicKeyState filename = do
-  rsaState <- createPublicRsaKeyState filename
-  eccKey <- createPublicEccKeyState filename
-  if isJust rsaState
-     then return $ Just $ PublicPkiRsa $ fromJust rsaState
-     else if isJust eccKey
-             then return eccKey
-             else throw CouldNotReadPkiFileException
+createPublicKeyState fileData
+  | fileData == C8.empty = return Nothing
+  | otherwise = do
+    rsaState <- createPublicRsaKeyState fileData
+    eccKey <- createPublicEccKeyState $ LBS.toStrict fileData
+    if isJust rsaState
+       then return $ Just $ PublicPkiRsa $ fromJust rsaState
+       else if isJust eccKey
+               then return $ eccKey
+               else throw CouldNotReadPkiFileException
 
 --------------------------------------------------------------------------------
 addAdditionalPrivatePkiState Nothing _ _ = return ()
@@ -117,10 +119,10 @@ addAdditionalPublicPkiState (Just (PublicPkiEcc temporaryKey publicKey)) pixels 
 --------------------------------------------------------------------------------
 
 createSignatureState filename = do
-  key <- readPrivateKey filename
+  let key =readPrivateKey filename
   case key of
-       Nothing -> return Nothing
-       k@(Just (PrivatePkiEcc _)) -> return k
+       Nothing -> Nothing
+       k@(Just (PrivatePkiEcc _)) -> k
        _ -> throw CouldNotReadPkiFileException
 
 addSignature Nothing _ _ _ = return ()

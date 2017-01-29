@@ -37,20 +37,20 @@ data SteganographyExceptions = NotEnoughSpaceInImageException { maxSize :: Int }
                                deriving (Show, Typeable)
 instance Exception SteganographyExceptions
 
-blockSecretCertificateAsInput inputFile = do
-  inputCertificate <- EccKeys.readSecretKey $ EccKeys.SecretKeyPath inputFile
+blockSecretCertificateAsInput inputData = do
+  let inputCertificate = EccKeys.decodeSecretKey inputData
   when (isJust inputCertificate) $ throw TriedToEncryptSecretCertificateException
 
-doEncrypt imageFile secretFile loops inputFile salt pkiFile signFile fastMode = do
-  a <- BS.readFile imageFile
-  secret <- LBS.readFile secretFile
-  input <- LBS.readFile inputFile
-  blockSecretCertificateAsInput inputFile
+doEncrypt imageFile secretFile loops inputData salt pkiFile signFile fastMode = do
+  let input = inputData
+  blockSecretCertificateAsInput $ LBS.toStrict inputData
   publicKeyState <- createPublicKeyState pkiFile
-  signState <- createSignatureState signFile
-  let Right (dynamicImage, metadata) = decodePngWithMetadata a
-      (newImage,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ pngDynamicMap (\img -> unsafeThawImage img >>= runFunc input publicKeyState signState (dynamicImage, metadata) (fromIntegral $ LBS.length secret)) dynamicImage
-  when (newImage /= LBS.empty) $ LBS.writeFile imageFile newImage
+  let signState = createSignatureState signFile
+      Right (dynamicImage, metadata) = decodePngWithMetadata imageFile
+      (newImage,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)] $ pngDynamicMap (\img -> unsafeThawImage img >>= runFunc input publicKeyState signState (dynamicImage, metadata) (fromIntegral $ LBS.length secretFile)) dynamicImage
+  if (newImage /= LBS.empty) 
+    then return $ Just newImage
+    else return Nothing
     where
     runFunc input publicKeyState signState (dynamicImage, metadatas) secretLength mutableImage = do
       let w = dynamicMap imageWidth dynamicImage
@@ -78,19 +78,17 @@ doEncrypt imageFile secretFile loops inputFile salt pkiFile signFile fastMode = 
                               result <- unsafeFreezeImage mutableImage
                               return $ encodePngWithMetadata metadatas result
 
-doDecrypt imageFile secretFile loops output salt pkiFile signFile = do
-  a <- BS.readFile imageFile
-  secret <- LBS.readFile secretFile
-  privateKey <- readPrivateKey pkiFile
+doDecrypt imageFile secretFile loops salt pkiFile signFile = do
   verifySignState <- createVerifySignatureState signFile
-  let Right dynamicImage = decodePng a
+  let privateKey = readPrivateKey pkiFile
+      Right dynamicImage = decodePng imageFile
       w = dynamicMap imageWidth dynamicImage
       h = dynamicMap imageHeight dynamicImage
       colors = fromIntegral $ pngDynamicComponentCount dynamicImage :: Word8
-      (r,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secret salt loops)] $ do
+      (r,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)] $ do
               pixels'1 <- lift $ newRandomElementST $ PixelStream.getPixels (fromIntegral w) (fromIntegral h) colors
               let pixels = (pixels'1, Nothing)
-              createRandomStates pixels dynamicImage salt $ fromIntegral $ LBS.length secret
+              createRandomStates pixels dynamicImage salt $ fromIntegral $ LBS.length secretFile
               addAdditionalPrivatePkiState privateKey pixels dynamicImage
               hiddenData <- readUntilHash pixels dynamicImage
               case hiddenData of
@@ -99,7 +97,7 @@ doDecrypt imageFile secretFile loops output salt pkiFile signFile = do
                      verify <- verifySignature verifySignState (LBS.toStrict hash) pixels dynamicImage
                      return $ Just (d, verify)
   case r of Nothing -> throw NoHiddenDataFoundException
-            Just (x, Nothing) -> LBS.writeFile output x
+            Just (x, Nothing) -> return $ Just x
             Just (x, Just verified) -> if verified
-                                          then LBS.writeFile output x
+                                          then return $ Just x
                                           else throw FoundDataButNoValidSignatureException
