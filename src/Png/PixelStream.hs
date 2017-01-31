@@ -1,5 +1,5 @@
 {-# LANGUAGE Safe #-}
-module PixelStream (getPixels, Pixel) where
+module Png.PixelStream (getPixels, Pixel) where
 
 import safe Data.Word (Word32, Word8)
 

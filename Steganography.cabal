@@ -16,7 +16,7 @@ Build-Type:          Simple
 Executable Steganography-commandline
   Main-Is:           CommandLineMain.hs
   Default-Language:  Haskell2010
-  hs-source-dirs:      src
+  hs-source-dirs:    src
   Build-Depends:     base>= 4 && <5,
                      array,
                      asn1-encoding,

@@ -1,9 +1,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE Rank2Types #-}
 
-module ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException, DifferentBetweenSizeOfPrimitivesAndDataLength), bitsAvailable, bytesAvailable) where
+module Png.ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException, DifferentBetweenSizeOfPrimitivesAndDataLength), bitsAvailable, bytesAvailable) where
 
 import Codec.Picture.Png (PngSavable)
+import Codec.Picture.Metadata (Metadatas)
 import Control.Exception (throw, Exception)
 import Control.Monad (forM, forM_, when)
 import Control.Monad.ST (ST())
@@ -14,19 +15,20 @@ import Data.Bits (Bits, xor, shift, (.&.), complement, (.|.))
 import Data.Maybe (isNothing, isJust, fromJust)
 import Data.Typeable (Typeable)
 import Data.Word (Word8)
-import PixelStream (Pixel)
+import Png.PixelStream (Pixel)
+import Data.List (find)
 
 import qualified Codec.Picture.Types as I
 import qualified Data.BitString as BS
 import qualified Data.ByteString.Lazy as ByS
 
-data CryptoPrimitive = CryptoPrimitive (PixelStream.Pixel) (Bool) deriving (Show)
+data CryptoPrimitive = CryptoPrimitive (Png.PixelStream.Pixel) (Bool) deriving (Show)
 type CryptoStream = [CryptoPrimitive]
 
-type PixelInfo s = (RandomElementsListST s Pixel, Maybe (STArray s (Int, Int) [Bool]))
+type PixelInfo s = (RandomElementsListST s Pixel, Maybe (STArray s (Int, Int) [Bool]), Metadatas)
 
 getCryptoPrimitives :: PixelInfo s -> Int -> RndST s CryptoStream
-getCryptoPrimitives (pixels,_) count = do
+getCryptoPrimitives (pixels,_,_) count = do
   read <- forM [1..count] $ \_ -> do
     pixel <- getRandomElement pixels
     inv <- getRandomBoolM
@@ -89,8 +91,8 @@ readBits_ primitives pixels image = BS.fromList $ read primitives
                       0 -> False
                       _ -> error "(_ & 1) returned something else than 0 or 1."
 
-readSalt :: PixelInfo s -> I.DynamicImage -> Int -> RndST s ByS.ByteString
-readSalt pixels@(_,pixelStatus) image count = read [0..count-1] >>= return . ByS.pack
+readSalt :: PixelInfo s -> I.DynamicImage -> Word -> RndST s ByS.ByteString
+readSalt pixels@(_,pixelStatus,_) image count = read [0..count-1] >>= return . ByS.pack
   where
   read = mapM $ \_ -> do
     [CryptoPrimitive (x, y, c) inv] <- getCryptoPrimitives pixels 1
@@ -137,7 +139,7 @@ findM f (x:xs) = do
      then return $ Just x
      else findM f xs
 
-writeBitsSafer (_, Just usedPixels) image@(I.MutableImage { I.mutableImageData = arr }) x y color newBit = do
+writeBitsSafer (_, Just usedPixels, _) image@(I.MutableImage { I.mutableImageData = arr }) x y color newBit = do
   let unsafeReadPixel x' y' = I.unsafeReadPixel arr $ I.mutablePixelBaseIndex image x' y'
 
   originalPixel <- unsafeReadPixel x y
@@ -151,7 +153,9 @@ writeBitsSafer (_, Just usedPixels) image@(I.MutableImage { I.mutableImageData =
                                                      then True
                                                      else prev) sourceSensitivity' [0..]
   writeArray usedPixels (x, y) sourceSensitivity
-  when (originalPixel /= newPixel) $ do
+  if originalPixel == newPixel
+    then return True
+    else do
 
     let validPixel = I.mixWith (\_ _ _ -> 1) originalPixel originalPixel
         overwritePixelLsb = I.mixWith (\_ value value2 -> (value .&. (complement 1)) .|. (value2 .&. 1))
@@ -176,18 +180,21 @@ writeBitsSafer (_, Just usedPixels) image@(I.MutableImage { I.mutableImageData =
     foundIt <- findM usable $ generateSeekPattern image x y
 
     case foundIt of
-         Nothing -> throw OutOfPixelsInSaferMode
+         Nothing -> return False
          Just (x', y') -> do
            otherPixel <- unsafeReadPixel x' y'
            let newOtherPixel = overwritePixelLsb otherPixel originalPixel
                newCurrentPixel = overwritePixelLsb originalPixel otherPixel
            I.writePixel image x y newCurrentPixel
            I.writePixel image x' y' newOtherPixel
+           return True
   
 
-writeBits_ primitives pixels@(_, pixelStatus) image bits = if length primitives >= (fromIntegral $ BS.length bits)
-                                             then forM_ (zipWith (\p b -> (p, b)) primitives (BS.toList bits)) inner
-                                             else error "Got more data that crypto primitives"
+writeBits_ primitives pixels@(_, pixelStatus,_) image bits = if length primitives < (fromIntegral $ BS.length bits)
+                                             then error "Got more data that crypto primitives"
+                                             else do
+                    merge <- forM (zipWith (\p b -> (p, b)) primitives (BS.toList bits)) inner
+                    return $ isJust $ find (\x -> not x) merge
   where
   inner (p, bit) = do
     let CryptoPrimitive (x, y, c) inv = p
@@ -203,6 +210,7 @@ writeBits_ primitives pixels@(_, pixelStatus) image bits = if length primitives 
                   then (value .&. (complement 1)) .|. newBit
                   else value) pixel pixel
          I.writePixel image x' y' pixel'
+         return True
        else writeBitsSafer pixels image x' y' (fromIntegral c) newBit
 
 writeBytes_ primitives pixels image bytes = lift $ writeBits_ primitives pixels image $ BS.bitStringLazy bytes
@@ -217,7 +225,8 @@ readBytes pixels image count = do
 
 writeBits pixels image bits = do
   primitives <- getCryptoPrimitives pixels $ fromIntegral $ BS.length bits
-  lift $ writeBits_ primitives pixels image bits
+  success <- lift $ writeBits_ primitives pixels image bits
+  return success
 
 writeBytes pixels image bytes = writeBits pixels image $ BS.bitStringLazy bytes
 
