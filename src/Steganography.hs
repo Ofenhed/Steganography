@@ -21,7 +21,7 @@ import HashedData (readUntilHash, writeAndHash)
 import SteganographyContainer (storageAvailable)
 import Pbkdf2 (hmacSha512Pbkdf2)
 import Png.PngContainer (PngImage)
-import SteganographyContainer (createContainer, unsafeWithSteganographyContainer)
+import SteganographyContainer (createContainer, withSteganographyContainer)
 
 import qualified Data.BitString as BS
 import qualified Data.ByteArray as BA
@@ -48,11 +48,12 @@ doEncrypt imageFile secretFile loops inputData salt pkiFile signFile fastMode = 
   publicKeyState <- createPublicKeyState pkiFile
   let signState = createSignatureState signFile
       --Right (dynamicImage, metadata) = decodePngWithMetadata imageFile
-      (newImage,_) = runST $ do
+      newImage = runST $ do
         container <- createContainer imageFile :: ST s (Either String (PngImage s))
         case container of
-          Left err -> error "Could not read image file"
-          Right container' -> runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)] $ do
+          Left err -> return $ Left $ "Could not read image file"
+          Right container' -> do
+            (result, _) <- runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)] $ do
               do -- Seperate context for IO operations
                 timeBefore <- lift $ unsafeIOToST getCurrentTime
                 createRandomStates container' salt (fromIntegral $ LBS.length secretFile)
@@ -60,7 +61,7 @@ doEncrypt imageFile secretFile loops inputData salt pkiFile signFile fastMode = 
                 let duration = diffUTCTime timeAfter timeBefore
                 lift $ unsafeIOToST $ putStrLn $ "Creating crypto context took " ++ (show $ duration)
                 when (duration < fromInteger warnIfFasterThanSeconds) $ lift $ unsafeIOToST $ putStrLn $ "This should take at least " ++ (show warnIfFasterThanSeconds) ++ " seconds. You should either change to a longer key or increase the iteration count."
-              unsafeWithSteganographyContainer container' $ \writer -> do
+              withSteganographyContainer container' $ \writer -> do
 
                 addAdditionalPublicPkiState publicKeyState writer
                 let dataLen = LBS.length input
@@ -76,27 +77,30 @@ doEncrypt imageFile secretFile loops inputData salt pkiFile signFile fastMode = 
                          case signResult of
                            Left err -> return $ Left err
                            Right () -> return $ Right ()
+            return result 
   return newImage
 
 doDecrypt imageFile secretFile loops salt pkiFile signFile = do
   verifySignState <- createVerifySignatureState signFile
   let privateKey = readPrivateKey pkiFile
-      (r,_) = runST $ do
+      hiddenData = runST $ do
         container <- createContainer imageFile :: ST s (Either String (PngImage s))
         case container of
           Left err -> error "" -- TODO: Make sure this compiles with Left
           Right reader -> do
-            runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)] $ do
+            (result, _) <- runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)] $ do
               createRandomStates reader salt $ fromIntegral $ LBS.length secretFile
               addAdditionalPrivatePkiState privateKey reader
               hiddenData <- readUntilHash reader
               case hiddenData of
-                   Nothing -> return Nothing
+                   Nothing -> return $ Left "No hidden data found"
                    Just (d, hash) -> do
                      verify <- verifySignature verifySignState (LBS.toStrict hash) reader
-                     return $ Just (d, verify)
-  case r of Nothing -> throw NoHiddenDataFoundException
-            Just (x, Nothing) -> return $ Just x
-            Just (x, Just verified) -> if verified
-                                          then return $ Just x
-                                          else throw FoundDataButNoValidSignatureException
+                     return $ Right (d, verify)
+            return result
+  case hiddenData of
+            Left msg -> return $ Left msg
+            Right (x, Nothing) -> return $ Right x
+            Right (x, Just verified) -> if verified
+                                           then return $ Right x
+                                           else return $ Left "Found data but the signature was invalid"

@@ -2,6 +2,7 @@ import Steganography (doEncrypt, doDecrypt)
 import EccKeys (generateKeyPair, SecretKeyPath(..), PublicKeyPath(..))
 
 import Control.Monad (when)
+import Data.Either (isRight)
 import Data.Maybe (isJust, fromJust)
 import System.Console.Command (Commands,Tree(Node),Command,command,withOption,withNonOption,io)
 import System.Console.Program (single,showUsage)
@@ -44,7 +45,9 @@ doDecrypt' imageFile secretFile loops output salt pkiFile signFile = do
   pkiData <- lazyReadOrEmpty pkiFile
   signData <- readOrEmpty signFile
   decrypted <- doDecrypt imageData secretData loops salt pkiData signData
-  when (isJust decrypted) $ C8.writeFile output (fromJust decrypted)
+  case decrypted of
+    Left err -> error err
+    Right decrypted' -> C8.writeFile output decrypted'
 
 encrypt,decrypt,help :: Command IO
 encrypt = command "encrypt" "Encrypt and hide a file into a PNG file. Notice that it will overwrite the image file. SHARED-SECRET-FILE is the key. INT is the complexity of the PRNG function, higher takes longer time and is therefore more secure. INPUT-FILE is the file to be hidden in the image." $ 
