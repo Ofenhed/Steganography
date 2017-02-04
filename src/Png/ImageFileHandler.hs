@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE Rank2Types #-}
 
-module Png.ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException, DifferentBetweenSizeOfPrimitivesAndDataLength), bitsAvailable, bytesAvailable, CryptoPrimitive, createCryptoState) where
+module Png.ImageFileHandler (readBits, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException, DifferentBetweenSizeOfPrimitivesAndDataLength), CryptoPrimitive, createCryptoState, PixelInfo) where
 
 import Codec.Picture.Png (PngSavable)
 import Codec.Picture.Metadata (Metadatas)
@@ -224,22 +224,6 @@ writeBits_ primitives pixels@(_, pixelStatus,_) image bits = if length primitive
          return $ Right ()
        else writeBitsSafer pixels image x' y' (fromIntegral c) newBit
 
-writeBytes_ primitives pixels image bytes = lift $ writeBits_ primitives pixels image $ BS.bitStringLazy bytes
-
 readBits pixels image count = do
   primitives <- getCryptoPrimitives pixels count
   return $ readBits_ primitives pixels image
-
-readBytes pixels image count = do
-  a <- readBits pixels image $ count * 8
-  return $ BS.realizeBitStringLazy a
-
-writeBits pixels image bits = do
-  primitives <- getCryptoPrimitives pixels $ fromIntegral $ BS.length bits
-  success <- lift $ writeBits_ primitives pixels image bits
-  return success
-
-writeBytes pixels image bytes = writeBits pixels image $ BS.bitStringLazy bytes
-
-bitsAvailable (unused,_) = randomElementsLength unused
-bytesAvailable (unused,_) = randomElementsLength unused >>= \bits -> return $ quot bits 8
