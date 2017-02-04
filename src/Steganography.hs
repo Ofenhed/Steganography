@@ -21,7 +21,7 @@ import HashedData (readUntilHash, writeAndHash)
 import SteganographyContainer (storageAvailable)
 import Pbkdf2 (hmacSha512Pbkdf2)
 import Png.PngContainer (PngImage)
-import SteganographyContainer (createContainer, withSteganographyContainer)
+import SteganographyContainer (createContainer, unsafeWithSteganographyContainer)
 
 import qualified Data.BitString as BS
 import qualified Data.ByteArray as BA
@@ -60,7 +60,7 @@ doEncrypt imageFile secretFile loops inputData salt pkiFile signFile fastMode = 
                 let duration = diffUTCTime timeAfter timeBefore
                 lift $ unsafeIOToST $ putStrLn $ "Creating crypto context took " ++ (show $ duration)
                 when (duration < fromInteger warnIfFasterThanSeconds) $ lift $ unsafeIOToST $ putStrLn $ "This should take at least " ++ (show warnIfFasterThanSeconds) ++ " seconds. You should either change to a longer key or increase the iteration count."
-              withSteganographyContainer container' $ \writer -> do
+              unsafeWithSteganographyContainer container' $ \writer -> do
 
                 addAdditionalPublicPkiState publicKeyState writer
                 let dataLen = LBS.length input
