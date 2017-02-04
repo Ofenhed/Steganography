@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE Rank2Types #-}
 
-module Png.ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException, DifferentBetweenSizeOfPrimitivesAndDataLength), bitsAvailable, bytesAvailable) where
+module Png.ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException, DifferentBetweenSizeOfPrimitivesAndDataLength), bitsAvailable, bytesAvailable, CryptoPrimitive) where
 
 import Codec.Picture.Png (PngSavable)
 import Codec.Picture.Metadata (Metadatas)
@@ -27,7 +27,7 @@ type CryptoStream = [CryptoPrimitive]
 
 type PixelInfo s = (RandomElementsListST s Pixel, Maybe (STArray s (Int, Int) [Bool]), Metadatas)
 
-getCryptoPrimitives :: PixelInfo s -> Int -> RndST s CryptoStream
+getCryptoPrimitives :: PixelInfo s -> Word -> RndST s CryptoStream
 getCryptoPrimitives (pixels,_,_) count = do
   read <- forM [1..count] $ \_ -> do
     pixel <- getRandomElement pixels

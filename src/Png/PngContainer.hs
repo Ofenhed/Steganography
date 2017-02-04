@@ -1,5 +1,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ExistentialQuantification #-}
 module PngContainer where
 
@@ -18,6 +19,7 @@ import Crypto.RandomMonad (newRandomElementST)
 import Data.Bits (Bits)
 import qualified Data.ByteString.Lazy as LBS
 import Codec.Picture.Metadata (Metadatas)
+import Control.Monad.Trans.Class (lift)
 
 type Pixel = (Word32, Word32, Word8)
 
@@ -31,26 +33,23 @@ getPixels x y colorsCount = do
 type PixelInfo s = (RandomElementsListST s Pixel, Maybe (STArray s (Int, Int) [Bool]), Metadatas)
 
 data PngImage s = PngImage I.DynamicImage (PixelInfo s)
-data WritablePngImage s a = (PngSavable a, PT.Pixel a, Bits (PT.PixelBaseComponent a)) => WritablePngImage (I.MutableImage s a) (PixelInfo s)
+data WritablePngImage s pixel = (PT.Pixel pixel, PngSavable pixel, Bits (PT.PixelBaseComponent pixel)) => WritablePngImage (I.MutableImage s pixel) (PixelInfo s)
 
-instance SteganographyContainer (ST s) (PngImage s) where
+instance WritableSteganographyContainer s (WritablePngImage s a) [A.CryptoPrimitive] where
+  getPrimitives (WritablePngImage image info) = A.getCryptoPrimitives info
+  writeBitsP (WritablePngImage image info) prim bits = lift $ A.writeBits_ prim info image bits
+
+instance SteganographyContainer s (PngImage s) where
   readSalt (PngImage i info) count = A.readSalt info i count
   readBits (PngImage i info) count = A.readBits info i (fromIntegral count)
-  length _ = error "Not implemented"
   createContainer imagedata = case decodePngWithMetadata (LBS.toStrict imagedata) of
                                 Right (dynamicImage, metadata) -> newRandomElementST [] >>= \element -> return $ Right $ PngImage dynamicImage (element, Nothing, metadata)
-                                Left _ -> return $ Left Nothing
+                                Left _ -> return $ Left "Could not decode"
 
-instance (PT.Pixel a) => WritableSteganographyContainer (ST s) (PngImage s) (WritablePngImage s a) where
-  writeBits (WritablePngImage image info) = A.writeBits info image
-
+  unsafeWithSteganographyContainer (PngImage image info) func =
+      A.pngDynamicMap
+        (\img -> unsafeThawImage img >>= \thawed -> func $ WritablePngImage thawed info) image
   withSteganographyContainer (PngImage image info) func =
       A.pngDynamicMap
-        (\img -> thawImage img >>= \thawed -> func (WritablePngImage thawed info)) image
-  --unsafeWithSteganographyContainer (PngImage image info) func =
-  --    A.pngDynamicMap
-  --      (\img -> unsafeThawImage img >>= \thawed -> func (WritablePngImage thawed info)) image
---instance ReadableSteganographyContainer (ST s) (PngImage s) where
---  readBits (PngImage i info) count = A.readBits info i (fromIntegral count)
---
---  createReadContainer = error "Not implemented"
+        (\img -> thawImage img >>= \thawed -> func $ WritablePngImage thawed info) image
+
