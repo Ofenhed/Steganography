@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
---module Steganography (doEncrypt, doDecrypt, SteganographyExceptions(..)) where
+module Steganography (doEncrypt, doDecrypt, SteganographyExceptions(..)) where
 
 import Codec.Picture.Png (decodePngWithMetadata, encodePngWithMetadata, decodePng)
 import Codec.Picture.Types (dynamicMap, imageHeight, imageWidth, unsafeThawImage, unsafeFreezeImage)
@@ -51,17 +51,17 @@ doEncrypt imageFile secretFile loops inputData salt pkiFile signFile fastMode = 
       (newImage,_) = runST $ do
         container <- createContainer imageFile :: ST s (Either String (PngImage s))
         case container of
-          Left err -> error "Whatevs"
+          Left err -> error "" -- TODO: Make sure this compiles with Left
           Right container' -> do
             runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)] $ do
-              createRandomStates container' salt (fromIntegral $ LBS.length secretFile)
+              do
+                timeBefore <- lift $ unsafeIOToST getCurrentTime
+                createRandomStates container' salt (fromIntegral $ LBS.length secretFile)
+                timeAfter <- lift $ unsafeIOToST getCurrentTime
+                let duration = diffUTCTime timeAfter timeBefore
+                lift $ unsafeIOToST $ putStrLn $ "Creating crypto context took " ++ (show $ duration)
+                when (duration < fromInteger warnIfFasterThanSeconds) $ lift $ unsafeIOToST $ putStrLn $ "This should take at least " ++ (show warnIfFasterThanSeconds) ++ " seconds. You should either change to a longer key or increase the iteration count."
               withSteganographyContainer container' $ \writer -> do
-                do
-                  timeBefore <- lift $ unsafeIOToST getCurrentTime
-                  timeAfter <- lift $ unsafeIOToST getCurrentTime
-                  let duration = diffUTCTime timeAfter timeBefore
-                  lift $ unsafeIOToST $ putStrLn $ "Creating crypto context took " ++ (show $ duration)
-                  when (duration < fromInteger warnIfFasterThanSeconds) $ lift $ unsafeIOToST $ putStrLn $ "This should take at least " ++ (show warnIfFasterThanSeconds) ++ " seconds. You should either change to a longer key or increase the iteration count."
 
                 addAdditionalPublicPkiState publicKeyState writer
                 let dataLen = LBS.length input
@@ -73,48 +73,26 @@ doEncrypt imageFile secretFile loops inputData salt pkiFile signFile fastMode = 
                      addSignature signState hash writer
                      return $ Right ()
   return newImage
-  --if (newImage /= LBS.empty) 
-  --  then return $ Just newImage
-  --  else return Nothing
---    where
---    runFunc input publicKeyState signState writer = do
---      do -- Unsafe operations in their own block to assure that nothing leaks
---        timeBefore <- lift $ unsafeIOToST getCurrentTime
---        timeAfter <- lift $ unsafeIOToST getCurrentTime
---        let duration = diffUTCTime timeAfter timeBefore
---        lift $ unsafeIOToST $ putStrLn $ "Creating crypto context took " ++ (show $ duration)
---        when (duration < fromInteger warnIfFasterThanSeconds) $ lift $ unsafeIOToST $ putStrLn $ "This should take at least " ++ (show warnIfFasterThanSeconds) ++ " seconds. You should either change to a longer key or increase the iteration count."
---
---      addAdditionalPublicPkiState publicKeyState writer
---      let dataLen = LBS.length input
---      availLen <- storageAvailable writer
---      if isJust availLen && (fromIntegral $ fromJust availLen) < (fromIntegral dataLen)
---         then return $ Left $ "Trying to fid " ++ (show dataLen) ++ " bytes in an image with " ++ (show $ fromJust availLen) ++ " bytes available"
---         else do
---           hash <- writeAndHash writer input
---           addSignature signState hash writer
---           return $ Right ()
 
---doDecrypt imageFile secretFile loops salt pkiFile signFile = do
---  verifySignState <- createVerifySignatureState signFile
---  let privateKey = readPrivateKey pkiFile
---      Right dynamicImage = decodePng imageFile
---      w = dynamicMap imageWidth dynamicImage
---      h = dynamicMap imageHeight dynamicImage
---      colors = fromIntegral $ pngDynamicComponentCount dynamicImage :: Word8
---      (r,_) = runST $ runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)] $ do
---              pixels'1 <- lift $ newRandomElementST $ PixelStream.getPixels (fromIntegral w) (fromIntegral h) colors
---              let pixels = (pixels'1, Nothing)
---              createRandomStates pixels dynamicImage salt $ fromIntegral $ LBS.length secretFile
---              addAdditionalPrivatePkiState privateKey pixels dynamicImage
---              hiddenData <- readUntilHash pixels dynamicImage
---              case hiddenData of
---                   Nothing -> return Nothing
---                   Just (d, hash) -> do
---                     verify <- verifySignature verifySignState (LBS.toStrict hash) pixels dynamicImage
---                     return $ Just (d, verify)
---  case r of Nothing -> throw NoHiddenDataFoundException
---            Just (x, Nothing) -> return $ Just x
---            Just (x, Just verified) -> if verified
---                                          then return $ Just x
---                                          else throw FoundDataButNoValidSignatureException
+doDecrypt imageFile secretFile loops salt pkiFile signFile = do
+  verifySignState <- createVerifySignatureState signFile
+  let privateKey = readPrivateKey pkiFile
+      (r,_) = runST $ do
+        container <- createContainer imageFile :: ST s (Either String (PngImage s))
+        case container of
+          Left err -> error "" -- TODO: Make sure this compiles with Left
+          Right reader -> do
+            runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)] $ do
+              createRandomStates reader salt $ fromIntegral $ LBS.length secretFile
+              addAdditionalPrivatePkiState privateKey reader
+              hiddenData <- readUntilHash reader
+              case hiddenData of
+                   Nothing -> return Nothing
+                   Just (d, hash) -> do
+                     verify <- verifySignature verifySignState (LBS.toStrict hash) reader
+                     return $ Just (d, verify)
+  case r of Nothing -> throw NoHiddenDataFoundException
+            Just (x, Nothing) -> return $ Just x
+            Just (x, Just verified) -> if verified
+                                          then return $ Just x
+                                          else throw FoundDataButNoValidSignatureException

@@ -161,7 +161,8 @@ verifySignature (Just (PublicPkiEcc _ key)) msg reader = do
        _ -> throw CouldNotVerifySignature
 --------------------------------------------------------------------------------
 createRandomStates reader salt minimumEntropyBytes = do
-  saltLength <- bytesAvailable reader
+  saltLength' <- bytesAvailable reader
+  let saltLength = quot saltLength' 30
   bigSalt <- readSalt reader $ saltLength
   extraSalt <- getRandomByteStringM $ max 0 $ minimumEntropyBytes - (fromIntegral $ quot saltLength 8)
   newPbkdfSecret <- getRandomByteStringM 256

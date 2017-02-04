@@ -188,7 +188,7 @@ writeBitsSafer (_, Just usedPixels, _) image@(I.MutableImage { I.mutableImageDat
     foundIt <- findM usable $ generateSeekPattern image x y
 
     case foundIt of
-         Nothing -> return False
+         Nothing -> return $ False
          Just (x', y') -> do
            otherPixel <- unsafeReadPixel x' y'
            let newOtherPixel = overwritePixelLsb otherPixel originalPixel
@@ -202,7 +202,7 @@ writeBits_ primitives pixels@(_, pixelStatus,_) image bits = if length primitive
                                              then error "Got more data that crypto primitives"
                                              else do
                     merge <- forM (zipWith (\p b -> (p, b)) primitives (BS.toList bits)) inner
-                    return $ isJust $ find (\x -> not x) merge
+                    return $ isNothing $ find (\x -> not x) merge
   where
   inner (p, bit) = do
     let CryptoPrimitive (x, y, c) inv = p

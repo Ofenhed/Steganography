@@ -28,16 +28,18 @@ readOrEmpty filename = C8.readFile filename
   
 
 doEncrypt' imageFile secretFile loops inputFile salt pkiFile signFile fastMode = do
-  imageData <- lazyReadOrEmpty imageFile
+  imageData <- readOrEmpty imageFile
   secretData <- readOrEmpty secretFile
   inputData <- readOrEmpty inputFile
   pkiData <- readOrEmpty pkiFile
   signData <- lazyReadOrEmpty signFile
   encrypted <- doEncrypt imageData secretData loops inputData salt pkiData signData fastMode
-  when (isJust encrypted) $ C8.writeFile imageFile (fromJust encrypted)
+  case encrypted of
+    Left err -> error err
+    Right encrypted' -> C8.writeFile imageFile encrypted'
 
 doDecrypt' imageFile secretFile loops output salt pkiFile signFile = do
-  imageData <- lazyReadOrEmpty imageFile
+  imageData <- readOrEmpty imageFile
   secretData <- readOrEmpty secretFile
   pkiData <- lazyReadOrEmpty pkiFile
   signData <- readOrEmpty signFile

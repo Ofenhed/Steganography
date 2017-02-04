@@ -5,8 +5,6 @@ module SteganographyContainer (SteganographyContainer(..), WritableSteganography
 import Crypto.RandomMonad (RndST)
 import Control.Monad.ST (ST)
 
-import qualified Data.Text as T
-
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.BitString as BiS
 
