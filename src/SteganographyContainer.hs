@@ -20,7 +20,7 @@ class SteganographyContainer s a where
   withSteganographyContainer :: a -> (forall c p. WritableSteganographyContainer s c p => c -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
   unsafeWithSteganographyContainer :: a -> (forall c p. WritableSteganographyContainer s c p => c -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
 
-  readBytes state len = readBits state (len * 8) >>= (return . BiS.realizeBitStringLazy)
+  readBytes state len = readBits state (len * byteSize) >>= (return . BiS.realizeBitStringLazy)
   unsafeWithSteganographyContainer = withSteganographyContainer
 
 class WritableSteganographyContainer s a p | a -> p where
