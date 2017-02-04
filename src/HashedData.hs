@@ -1,7 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE RankNTypes #-}
-
 module HashedData (writeAndHash, readUntilHash) where
 
 import Control.Monad.ST (ST)
@@ -44,7 +40,7 @@ signatureFinalize (SignatureHash s1 s2 s3 s4) = hash
   s3' = finalize s3
   s4' = finalize s4
 
-writeAndHash :: (forall p. WritableSteganographyContainer s a p) => a -> RndST s [Word8]
+writeAndHash :: WritableSteganographyContainer s a p => a -> LBS.ByteString -> RndST s [Word8]
 writeAndHash writer input = do
   let blockSize = hashDigestSize SHA1
   hashPosition <- getPrimitives writer (fromIntegral $ 8 * blockSize)
@@ -67,7 +63,7 @@ writeAndHash writer input = do
                                                 writeAndHashRecursive (LBS.tail input') newHash newSign
   (h1, h2) <- writeAndHashRecursive input hash' bigHashes
   let hash = LBS.pack $ BA.unpack h1
-  writeBytesP hashPosition writer hash
+  writeBytesP writer hashPosition hash
   return h2
 
 readUntilHash reader = do

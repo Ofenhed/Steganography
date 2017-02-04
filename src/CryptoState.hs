@@ -3,7 +3,7 @@
 
 module CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature) where
 
-import SteganographyContainer (readBytes, writeBytes, writeBytesP, getPrimitives, readSalt, bytesAvailable)
+import SteganographyContainer (readBytes, writeBytes, writeBytesP, getPrimitives, readSalt, bytesAvailable, WritableSteganographyContainer(..))
 import safe AesEngine (createAes256RngState)
 import safe Pbkdf2 (hmacSha512Pbkdf2)
 
@@ -13,7 +13,7 @@ import Crypto.PubKey.RSA.Types (private_size, Error(MessageTooLong), public_size
 import Crypto.Random.Entropy (getEntropy)
 import safe Control.Exception (Exception, throw)
 import safe Crypto.Error (CryptoFailable(CryptoPassed))
-import safe Crypto.RandomMonad (replaceSeedM, addSeedM, getRandomByteStringM)
+import safe Crypto.RandomMonad (replaceSeedM, addSeedM, getRandomByteStringM, RndST)
 import safe Data.Maybe (isNothing, isJust, fromJust)
 import safe Data.Typeable (Typeable)
 import safe Data.Word (Word8)
@@ -125,6 +125,7 @@ createSignatureState filename = do
        k@(Just (PrivatePkiEcc _)) -> k
        _ -> throw CouldNotReadPkiFileException
 
+addSignature :: WritableSteganographyContainer s a p => Maybe PrivatePki -> [Word8] -> a -> RndST s ()
 addSignature Nothing _ _ = return ()
 addSignature (Just (PrivatePkiEcc key)) msg writer = do
   let key' = EccKeys.getSecretSignKey key
@@ -135,7 +136,7 @@ addSignature (Just (PrivatePkiEcc key)) msg writer = do
          signatureSalt <- getRandomByteStringM 64
          let toSign = BS.pack $ (LBS.unpack signatureSalt) ++  msg
              signature = ED.sign k (ED.toPublic k) toSign
-         result <- writeBytesP hashPosition writer (LBS.pack $ BA.unpack signature)
+         result <- writeBytesP writer hashPosition (LBS.pack $ BA.unpack signature)
          case result of
               True -> return ()
               False -> throw CouldNotAddSignature
