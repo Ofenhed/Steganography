@@ -51,10 +51,9 @@ doEncrypt imageFile secretFile loops inputData salt pkiFile signFile fastMode = 
       (newImage,_) = runST $ do
         container <- createContainer imageFile :: ST s (Either String (PngImage s))
         case container of
-          Left err -> error "" -- TODO: Make sure this compiles with Left
-          Right container' -> do
-            runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)] $ do
-              do
+          Left err -> error "Could not read image file"
+          Right container' -> runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)] $ do
+              do -- Seperate context for IO operations
                 timeBefore <- lift $ unsafeIOToST getCurrentTime
                 createRandomStates container' salt (fromIntegral $ LBS.length secretFile)
                 timeAfter <- lift $ unsafeIOToST getCurrentTime
@@ -69,9 +68,14 @@ doEncrypt imageFile secretFile loops inputData salt pkiFile signFile fastMode = 
                 if isJust availLen && (fromIntegral $ fromJust availLen) < (fromIntegral dataLen)
                    then return $ Left $ "Trying to fid " ++ (show dataLen) ++ " bytes in an image with " ++ (show $ fromJust availLen) ++ " bytes available"
                    else do
-                     hash <- writeAndHash writer input
-                     addSignature signState hash writer
-                     return $ Right ()
+                     hash' <- writeAndHash writer input
+                     case hash' of
+                       Left err -> return $ Left err
+                       Right hash -> do
+                         signResult <- addSignature signState hash writer
+                         case signResult of
+                           Left err -> return $ Left err
+                           Right () -> return $ Right ()
   return newImage
 
 doDecrypt imageFile secretFile loops salt pkiFile signFile = do

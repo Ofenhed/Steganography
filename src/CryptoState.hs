@@ -98,24 +98,32 @@ addAdditionalPrivatePkiState (Just (PrivatePkiEcc key)) reader = do
       key' = BS.pack $ BA.unpack $ Curve.dh pubKey $ EccKeys.getSecretCryptoKey key
   addSeedM $ createAes256RngState $ key'
 --------------------------------------------------------------------------------
-addAdditionalPublicPkiState Nothing _ = return ()
+addAdditionalPublicPkiState Nothing _ = return $ Right ()
 
 addAdditionalPublicPkiState (Just (PublicPkiRsa (seed, secret, key))) writer = do
   let encrypted = OAEP.encryptWithSeed (BS.pack seed) oaepParams key $ BS.pack secret
   case encrypted of
        Left MessageTooLong -> addAdditionalPublicPkiState (Just (PublicPkiRsa (seed, tail secret, key))) writer
-       Left err -> error $ "Unexpected error in OAEP.encryptWithSeed: " ++ (show err)
+       Left err -> return $ Left $ "Unexpected error in OAEP.encryptWithSeed: " ++ (show err)
        Right b -> do
-         writeBytes writer $ LBS.fromStrict b
-         salt <- getRandomByteStringM 256
-         addSeedM [BiS.bitStringLazy $ hmacSha512Pbkdf2 (LBS.pack secret) salt 5]
+         result <- writeBytes writer $ LBS.fromStrict b
+         case result of
+           Left err -> return $ Left err
+           Right _ -> do
+             salt <- getRandomByteStringM 256
+             addSeedM [BiS.bitStringLazy $ hmacSha512Pbkdf2 (LBS.pack secret) salt 5]
+             return $ Right ()
 
 addAdditionalPublicPkiState (Just (PublicPkiEcc temporaryKey publicKey)) writer = do
   let temporaryKey' = EccKeys.getSecretCryptoKey temporaryKey
       key = BS.pack $ BA.unpack $ Curve.dh (EccKeys.getPublicCryptoKey publicKey) $ temporaryKey'
       toWrite = LBS.pack $ BA.unpack $ Curve.toPublic temporaryKey'
-  writeBytes writer toWrite
-  addSeedM $ createAes256RngState key
+  result <- writeBytes writer toWrite
+  case result of
+    Left msg -> return $ Left msg
+    Right () -> do
+      addSeedM $ createAes256RngState key
+      return $ Right ()
 --------------------------------------------------------------------------------
 
 createSignatureState filename = do
@@ -125,12 +133,12 @@ createSignatureState filename = do
        k@(Just (PrivatePkiEcc _)) -> k
        _ -> throw CouldNotReadPkiFileException
 
-addSignature :: WritableSteganographyContainer s a p => Maybe PrivatePki -> [Word8] -> a -> RndST s ()
-addSignature Nothing _ _ = return ()
+addSignature :: WritableSteganographyContainer s a p => Maybe PrivatePki -> [Word8] -> a -> RndST s (Either String ())
+addSignature Nothing _ _ = return $ Right ()
 addSignature (Just (PrivatePkiEcc key)) msg writer = do
   let key' = EccKeys.getSecretSignKey key
   case key' of
-       Nothing -> throw CouldNotAddSignature 
+       Nothing -> return $ Left $ "Signature key not valid"
        Just k -> do
          hashPosition <- getPrimitives writer 512 -- Signature size
          signatureSalt <- getRandomByteStringM 64
@@ -138,8 +146,8 @@ addSignature (Just (PrivatePkiEcc key)) msg writer = do
              signature = ED.sign k (ED.toPublic k) toSign
          result <- writeBytesP writer hashPosition (LBS.pack $ BA.unpack signature)
          case result of
-              True -> return ()
-              False -> throw CouldNotAddSignature
+              Right () -> return $ Right ()
+              Left msg -> return $ Left $ "Could not add signature: " ++ msg
 
 createVerifySignatureState filename = do
   key <- createPublicKeyState filename

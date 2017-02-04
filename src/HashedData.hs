@@ -40,7 +40,7 @@ signatureFinalize (SignatureHash s1 s2 s3 s4) = hash
   s3' = finalize s3
   s4' = finalize s4
 
-writeAndHash :: WritableSteganographyContainer s a p => a -> LBS.ByteString -> RndST s [Word8]
+writeAndHash :: WritableSteganographyContainer s a p => a -> LBS.ByteString -> RndST s (Either String [Word8])
 writeAndHash writer input = do
   let blockSize = hashDigestSize SHA1
   hashPosition <- getPrimitives writer (fromIntegral $ 8 * blockSize)
@@ -50,21 +50,30 @@ writeAndHash writer input = do
 
   let hash' = initialize (LBS.toStrict hashSalt) :: Context SHA1
       writeAndHashRecursive input' h1 h2 = if LBS.length input' == 0
-                                              then return $ (finalize h1, signatureFinalize h2)
+                                              then return $ Right $ (finalize h1, signatureFinalize h2)
                                               else do
                                                 let byte = LBS.singleton $ LBS.head input'
-                                                writeBytes writer byte
-                                                macXorBytes <- getRandomByteStringM 1
-                                                let [macXorByte] = LBS.unpack macXorBytes
-                                                    macByte = LBS.map (\x -> xor x macXorByte) byte
-                                                    macByte' = LBS.toStrict macByte
-                                                    newHash = update h1 macByte'
-                                                    newSign = signatureUpdate h2 $ LBS.toStrict byte
-                                                writeAndHashRecursive (LBS.tail input') newHash newSign
-  (h1, h2) <- writeAndHashRecursive input hash' bigHashes
-  let hash = LBS.pack $ BA.unpack h1
-  writeBytesP writer hashPosition hash
-  return h2
+                                                writeResult <- writeBytes writer byte
+                                                case writeResult of
+                                                  Left str -> return $ Left str
+                                                  Right () -> do
+                                                    macXorBytes <- getRandomByteStringM 1
+                                                    let [macXorByte] = LBS.unpack macXorBytes
+                                                        macByte = LBS.map (\x -> xor x macXorByte) byte
+                                                        macByte' = LBS.toStrict macByte
+                                                        newHash = update h1 macByte'
+                                                        newSign = signatureUpdate h2 $ LBS.toStrict byte
+                                                    writeAndHashRecursive (LBS.tail input') newHash newSign
+  result <- writeAndHashRecursive input hash' bigHashes
+  case result of
+    Left msg -> return $ Left $ "Could not write and hash: " ++ msg
+    Right (h1, h2) -> do
+      writeAndHashRecursive input hash' bigHashes
+      let hash = LBS.pack $ BA.unpack h1
+      writeResult <- writeBytesP writer hashPosition hash
+      case writeResult of
+        Left msg -> return $ Left $ "Could not write hash: " ++ msg
+        Right () -> return $ Right h2
 
 readUntilHash reader = do
   let blockSize = hashDigestSize SHA1

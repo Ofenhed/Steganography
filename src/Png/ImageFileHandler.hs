@@ -11,6 +11,7 @@ import Control.Monad.ST (ST())
 import Control.Monad.Trans.Class (lift)
 import Crypto.RandomMonad (getRandomElement, RndST, getRandomM, randomElementsLength, RandomElementsListST(), newRandomElementST)
 import Data.Array.ST (STArray(), getBounds, writeArray, readArray, newArray)
+import Data.Either (isLeft)
 import Data.Bits (Bits, xor, shift, (.&.), complement, (.|.))
 import Data.Maybe (isNothing, isJust, fromJust)
 import Data.Typeable (Typeable)
@@ -162,7 +163,7 @@ writeBitsSafer (_, Just usedPixels, _) image@(I.MutableImage { I.mutableImageDat
                                                      else prev) sourceSensitivity' [0..]
   writeArray usedPixels (x, y) sourceSensitivity
   if originalPixel == newPixel
-    then return True
+    then return $ Right ()
     else do
 
     let validPixel = I.mixWith (\_ _ _ -> 1) originalPixel originalPixel
@@ -188,21 +189,23 @@ writeBitsSafer (_, Just usedPixels, _) image@(I.MutableImage { I.mutableImageDat
     foundIt <- findM usable $ generateSeekPattern image x y
 
     case foundIt of
-         Nothing -> return $ False
+         Nothing -> return $ Left "Could not find a pixel to trade with"
          Just (x', y') -> do
            otherPixel <- unsafeReadPixel x' y'
            let newOtherPixel = overwritePixelLsb otherPixel originalPixel
                newCurrentPixel = overwritePixelLsb originalPixel otherPixel
            I.writePixel image x y newCurrentPixel
            I.writePixel image x' y' newOtherPixel
-           return True
+           return $ Right ()
   
 
 writeBits_ primitives pixels@(_, pixelStatus,_) image bits = if length primitives < (fromIntegral $ BS.length bits)
-                                             then error "Got more data that crypto primitives"
+                                             then return $ Left "Got more data that crypto primitives"
                                              else do
                     merge <- forM (zipWith (\p b -> (p, b)) primitives (BS.toList bits)) inner
-                    return $ isNothing $ find (\x -> not x) merge
+                    case find (\x -> isLeft x) merge of
+                         Nothing -> return $ Right ()
+                         Just msg -> return $ msg
   where
   inner (p, bit) = do
     let CryptoPrimitive (x, y, c) inv = p
@@ -218,7 +221,7 @@ writeBits_ primitives pixels@(_, pixelStatus,_) image bits = if length primitive
                   then (value .&. (complement 1)) .|. newBit
                   else value) pixel pixel
          I.writePixel image x' y' pixel'
-         return True
+         return $ Right ()
        else writeBitsSafer pixels image x' y' (fromIntegral c) newBit
 
 writeBytes_ primitives pixels image bytes = lift $ writeBits_ primitives pixels image $ BS.bitStringLazy bytes

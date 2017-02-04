@@ -2,11 +2,11 @@
 {-# LANGUAGE RankNTypes #-}
 module SteganographyContainer (SteganographyContainer(..), WritableSteganographyContainer(..)) where
 
-import Crypto.RandomMonad (RndST)
 import Control.Monad.ST (ST)
+import Crypto.RandomMonad (RndST)
 
-import qualified Data.ByteString.Lazy as LBS
 import qualified Data.BitString as BiS
+import qualified Data.ByteString.Lazy as LBS
 
 byteSize = 8
 
@@ -26,12 +26,12 @@ class SteganographyContainer s a where
 class WritableSteganographyContainer s a p | a -> p where
   -- With primitives
   getPrimitives :: a -> Word -> RndST s p
-  writeBitsP :: a -> p -> BiS.BitString -> RndST s Bool
-  writeBytesP :: a -> p -> LBS.ByteString -> RndST s Bool
+  writeBitsP :: a -> p -> BiS.BitString -> RndST s (Either String ())
+  writeBytesP :: a -> p -> LBS.ByteString -> RndST s (Either String ())
 
   -- Without primitives
-  writeBits :: a -> BiS.BitString -> RndST s Bool
-  writeBytes :: a -> LBS.ByteString -> RndST s Bool
+  writeBits :: a -> BiS.BitString -> RndST s (Either String ())
+  writeBytes :: a -> LBS.ByteString -> RndST s (Either String ())
 
   storageAvailable :: a -> RndST s (Maybe Word)
   storageAvailable _ = return Nothing
