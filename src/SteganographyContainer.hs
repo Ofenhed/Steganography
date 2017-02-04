@@ -11,15 +11,17 @@ import qualified Data.ByteString.Lazy as LBS
 byteSize = 8
 
 class SteganographyContainer s a where
+  createContainer :: LBS.ByteString -> ST s (Either String a)
+  withSteganographyContainer :: a -> (forall c p. WritableSteganographyContainer s c p => c -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
+  unsafeWithSteganographyContainer :: a -> (forall c p. WritableSteganographyContainer s c p => c -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
+
+  -- Readers
   readBits :: a -> Word -> RndST s BiS.BitString
   readSalt :: a -> Word -> RndST s LBS.ByteString
   readBytes :: a -> Word -> RndST s LBS.ByteString
   bytesAvailable :: a -> RndST s Word
 
-  createContainer :: LBS.ByteString -> ST s (Either String a)
-  withSteganographyContainer :: a -> (forall c p. WritableSteganographyContainer s c p => c -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
-  unsafeWithSteganographyContainer :: a -> (forall c p. WritableSteganographyContainer s c p => c -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
-
+  -- Defaults
   readBytes state len = readBits state (len * byteSize) >>= (return . BiS.realizeBitStringLazy)
   unsafeWithSteganographyContainer = withSteganographyContainer
 
