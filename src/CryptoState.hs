@@ -3,7 +3,7 @@
 
 module CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature) where
 
-import ImageFileHandler (readBytes, writeBytes, writeBytes_, getCryptoPrimitives, readSalt, pngDynamicMap)
+import SteganographyContainer (readBytes, writeBytes, writeBytesP, getPrimitives, readSalt, bytesAvailable)
 import safe AesEngine (createAes256RngState)
 import safe Pbkdf2 (hmacSha512Pbkdf2)
 
@@ -84,37 +84,37 @@ createPublicKeyState fileData
                else throw CouldNotReadPkiFileException
 
 --------------------------------------------------------------------------------
-addAdditionalPrivatePkiState Nothing _ _ = return ()
+addAdditionalPrivatePkiState Nothing _ = return ()
 
-addAdditionalPrivatePkiState (Just (PrivatePkiRsa key)) pixels image = do
-  encrypted <- readBytes pixels image $ private_size key
+addAdditionalPrivatePkiState (Just (PrivatePkiRsa key)) reader = do
+  encrypted <- readBytes reader $ fromIntegral $ private_size key
   let Right decrypted = OAEP.decrypt Nothing oaepParams key (LBS.toStrict encrypted)
   salt <- getRandomByteStringM 256
   addSeedM [(BiS.bitStringLazy $ hmacSha512Pbkdf2 (C8.fromStrict decrypted) salt 5)]
 
-addAdditionalPrivatePkiState (Just (PrivatePkiEcc key)) pixels image = do
-  encryptedKey <- readBytes pixels image $ 32 -- ECC key size
+addAdditionalPrivatePkiState (Just (PrivatePkiEcc key)) reader = do
+  encryptedKey <- readBytes reader $ 32 -- ECC key size
   let CryptoPassed pubKey = Curve.publicKey $ LBS.toStrict encryptedKey
       key' = BS.pack $ BA.unpack $ Curve.dh pubKey $ EccKeys.getSecretCryptoKey key
   addSeedM $ createAes256RngState $ key'
 --------------------------------------------------------------------------------
-addAdditionalPublicPkiState Nothing _ _ = return ()
+addAdditionalPublicPkiState Nothing _ = return ()
 
-addAdditionalPublicPkiState (Just (PublicPkiRsa (seed, secret, key))) pixels image = do
+addAdditionalPublicPkiState (Just (PublicPkiRsa (seed, secret, key))) writer = do
   let encrypted = OAEP.encryptWithSeed (BS.pack seed) oaepParams key $ BS.pack secret
   case encrypted of
-       Left MessageTooLong -> addAdditionalPublicPkiState (Just (PublicPkiRsa (seed, tail secret, key))) pixels image
+       Left MessageTooLong -> addAdditionalPublicPkiState (Just (PublicPkiRsa (seed, tail secret, key))) writer
        Left err -> error $ "Unexpected error in OAEP.encryptWithSeed: " ++ (show err)
        Right b -> do
-         writeBytes pixels image $ LBS.fromStrict b
+         writeBytes writer $ LBS.fromStrict b
          salt <- getRandomByteStringM 256
          addSeedM [BiS.bitStringLazy $ hmacSha512Pbkdf2 (LBS.pack secret) salt 5]
 
-addAdditionalPublicPkiState (Just (PublicPkiEcc temporaryKey publicKey)) pixels image = do
+addAdditionalPublicPkiState (Just (PublicPkiEcc temporaryKey publicKey)) writer = do
   let temporaryKey' = EccKeys.getSecretCryptoKey temporaryKey
       key = BS.pack $ BA.unpack $ Curve.dh (EccKeys.getPublicCryptoKey publicKey) $ temporaryKey'
       toWrite = LBS.pack $ BA.unpack $ Curve.toPublic temporaryKey'
-  writeBytes pixels image toWrite
+  writeBytes writer toWrite
   addSeedM $ createAes256RngState key
 --------------------------------------------------------------------------------
 
@@ -125,17 +125,20 @@ createSignatureState filename = do
        k@(Just (PrivatePkiEcc _)) -> k
        _ -> throw CouldNotReadPkiFileException
 
-addSignature Nothing _ _ _ = return ()
-addSignature (Just (PrivatePkiEcc key)) msg pixels image = do
+addSignature Nothing _ _ = return ()
+addSignature (Just (PrivatePkiEcc key)) msg writer = do
   let key' = EccKeys.getSecretSignKey key
   case key' of
        Nothing -> throw CouldNotAddSignature 
        Just k -> do
-         hashPosition <- getCryptoPrimitives pixels 512 -- Signature size
+         hashPosition <- getPrimitives writer 512 -- Signature size
          signatureSalt <- getRandomByteStringM 64
          let toSign = BS.pack $ (LBS.unpack signatureSalt) ++  msg
              signature = ED.sign k (ED.toPublic k) toSign
-         writeBytes_ hashPosition pixels image (LBS.pack $ BA.unpack signature)
+         result <- writeBytesP hashPosition writer (LBS.pack $ BA.unpack signature)
+         case result of
+              True -> return ()
+              False -> throw CouldNotAddSignature
 
 createVerifySignatureState filename = do
   key <- createPublicKeyState filename
@@ -144,9 +147,9 @@ createVerifySignatureState filename = do
        k@(Just (PublicPkiEcc _ _)) -> return $ k
        _ -> throw CouldNotReadPkiFileException
 
-verifySignature Nothing _ _ _ = return Nothing
-verifySignature (Just (PublicPkiEcc _ key)) msg pixels image = do
-  signature <- readBytes pixels image $ 64 -- ED25519 signature size
+verifySignature Nothing _ _ = return Nothing
+verifySignature (Just (PublicPkiEcc _ key)) msg reader = do
+  signature <- readBytes reader $ 64 -- ED25519 signature size
   signatureSalt <- getRandomByteStringM 64
   let key' = EccKeys.getPublicSignKey key
   let signature' = ED.signature $ BS.pack $ LBS.unpack signature
@@ -156,14 +159,10 @@ verifySignature (Just (PublicPkiEcc _ key)) msg pixels image = do
          return $ Just $ ED.verify k toSign s
        _ -> throw CouldNotVerifySignature
 --------------------------------------------------------------------------------
-createRandomStates pixels image salt minimumEntropyBytes = do
-  let width = pngDynamicMap imageWidth image
-      height = pngDynamicMap imageHeight image
-      imageSaltLength = quot (width*height) 10
-  bigSalt <- readSalt pixels image $ imageSaltLength
-  -- For the worst possible image, bigSalt will contain 1 bit of entropy
-  -- per byte, since it's inverted by the inv variable from the PixelStream.
-  extraSalt <- getRandomByteStringM $ max 0 $ minimumEntropyBytes - (fromIntegral $ quot imageSaltLength 8)
+createRandomStates reader salt minimumEntropyBytes = do
+  saltLength <- bytesAvailable reader
+  bigSalt <- readSalt reader $ saltLength
+  extraSalt <- getRandomByteStringM $ max 0 $ minimumEntropyBytes - (fromIntegral $ quot saltLength 8)
   newPbkdfSecret <- getRandomByteStringM 256
   aesSecret1 <- getRandomByteStringM 32
   replaceSeedM [BiS.bitStringLazy $ hmacSha512Pbkdf2 newPbkdfSecret (LBS.concat [bigSalt, salt, extraSalt]) 5]

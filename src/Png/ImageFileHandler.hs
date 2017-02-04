@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE Rank2Types #-}
 
-module Png.ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException, DifferentBetweenSizeOfPrimitivesAndDataLength), bitsAvailable, bytesAvailable, CryptoPrimitive) where
+module Png.ImageFileHandler (readBits, readBytes, writeBits, writeBytes, writeBytes_, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException, DifferentBetweenSizeOfPrimitivesAndDataLength), bitsAvailable, bytesAvailable, CryptoPrimitive, createCryptoState) where
 
 import Codec.Picture.Png (PngSavable)
 import Codec.Picture.Metadata (Metadatas)
@@ -9,13 +9,13 @@ import Control.Exception (throw, Exception)
 import Control.Monad (forM, forM_, when)
 import Control.Monad.ST (ST())
 import Control.Monad.Trans.Class (lift)
-import Crypto.RandomMonad (getRandomElement, RndST, getRandomM, randomElementsLength, RandomElementsListST())
-import Data.Array.ST (STArray(), getBounds, writeArray, readArray)
+import Crypto.RandomMonad (getRandomElement, RndST, getRandomM, randomElementsLength, RandomElementsListST(), newRandomElementST)
+import Data.Array.ST (STArray(), getBounds, writeArray, readArray, newArray)
 import Data.Bits (Bits, xor, shift, (.&.), complement, (.|.))
 import Data.Maybe (isNothing, isJust, fromJust)
 import Data.Typeable (Typeable)
 import Data.Word (Word8)
-import Png.PixelStream (Pixel)
+import Png.PixelStream (Pixel, getPixels)
 import Data.List (find)
 
 import qualified Codec.Picture.Types as I
@@ -26,6 +26,14 @@ data CryptoPrimitive = CryptoPrimitive (Png.PixelStream.Pixel) (Bool) deriving (
 type CryptoStream = [CryptoPrimitive]
 
 type PixelInfo s = (RandomElementsListST s Pixel, Maybe (STArray s (Int, Int) [Bool]), Metadatas)
+
+createCryptoState fastMode dynamicImage = do
+  let w = I.dynamicMap I.imageWidth dynamicImage
+      h = I.dynamicMap I.imageHeight dynamicImage
+      colors = fromIntegral $ pngDynamicComponentCount dynamicImage :: Word8
+  pixels'1 <- newRandomElementST $ getPixels (fromIntegral w) (fromIntegral h) colors
+  pixels'2 <- (newArray ((0, 0), (fromIntegral w - 1, fromIntegral h - 1)) $ map (\_ -> False) [1..fromIntegral colors] :: ST s (STArray s (Int, Int) [Bool]))
+  return (pixels'1, if fastMode then Nothing else Just pixels'2)
 
 getCryptoPrimitives :: PixelInfo s -> Word -> RndST s CryptoStream
 getCryptoPrimitives (pixels,_,_) count = do

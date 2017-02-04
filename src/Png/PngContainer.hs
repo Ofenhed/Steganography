@@ -2,17 +2,17 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ExistentialQuantification #-}
-module PngContainer where
+module Png.PngContainer (PngImage(..)) where
 
 import SteganographyContainer (SteganographyContainer(..), WritableSteganographyContainer(..))
 import Control.Monad.ST (ST)
 import qualified Codec.Picture.Types as I
 import Data.Word (Word32, Word8)
 import Codec.Picture.Png (PngSavable)
-import Codec.Picture.Types (dynamicMap, imageHeight, imageWidth, thawImage, unsafeThawImage, unsafeFreezeImage)
+import Codec.Picture.Types (dynamicMap, imageHeight, imageWidth, thawImage, unsafeThawImage, unsafeFreezeImage, freezeImage)
 import qualified Codec.Picture.Types as PT
 import Codec.Picture.Png (decodePngWithMetadata, encodePngWithMetadata, decodePng)
-import Crypto.RandomMonad (getRandomElement, RndST, getRandomM, randomElementsLength, RandomElementsListST())
+import Crypto.RandomMonad (getRandomElement, RndT, getRandomM, randomElementsLength, RandomElementsListST())
 import Data.Array.ST (STArray(), getBounds, writeArray, readArray)
 import qualified Png.ImageFileHandler as A
 import Crypto.RandomMonad (newRandomElementST)
@@ -43,13 +43,19 @@ instance SteganographyContainer s (PngImage s) where
   readSalt (PngImage i info) count = A.readSalt info i count
   readBits (PngImage i info) count = A.readBits info i (fromIntegral count)
   createContainer imagedata = case decodePngWithMetadata (LBS.toStrict imagedata) of
-                                Right (dynamicImage, metadata) -> newRandomElementST [] >>= \element -> return $ Right $ PngImage dynamicImage (element, Nothing, metadata)
+                                Right (dynamicImage, metadata) -> A.createCryptoState False dynamicImage >>= \(element, otherthing) -> return $ Right $ PngImage dynamicImage (element, otherthing, metadata)
                                 Left _ -> return $ Left "Could not decode"
 
-  unsafeWithSteganographyContainer (PngImage image info) func =
-      A.pngDynamicMap
-        (\img -> unsafeThawImage img >>= \thawed -> func $ WritablePngImage thawed info) image
-  withSteganographyContainer (PngImage image info) func =
-      A.pngDynamicMap
-        (\img -> thawImage img >>= \thawed -> func $ WritablePngImage thawed info) image
+  bytesAvailable (PngImage i (elements, _, _)) = randomElementsLength elements >>= return . fromIntegral
 
+  --unsafeWithSteganographyContainer (PngImage image info) func =
+  --    A.pngDynamicMap
+  --      (\img -> unsafeThawImage img >>= \thawed -> func $ WritablePngImage thawed info) image
+  withSteganographyContainer (PngImage image info@(_, _, metadata)) func = A.pngDynamicMap (\img -> do
+      thawed <- thawImage img
+      result <- func $ WritablePngImage thawed info
+      case result of
+        Left err -> return $ Left err
+        Right _ -> do
+          frozen <- freezeImage thawed
+          return $ Right $ encodePngWithMetadata metadata frozen) image

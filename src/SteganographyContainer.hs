@@ -16,10 +16,11 @@ class SteganographyContainer s a where
   readBits :: a -> Word -> RndST s BiS.BitString
   readSalt :: a -> Word -> RndST s LBS.ByteString
   readBytes :: a -> Word -> RndST s LBS.ByteString
+  bytesAvailable :: a -> RndST s Word
 
   createContainer :: LBS.ByteString -> ST s (Either String a)
-  withSteganographyContainer :: a -> (forall c p. WritableSteganographyContainer s c p => c -> RndST s (Either String a)) -> RndST s (Either String a)
-  unsafeWithSteganographyContainer :: a -> (forall c p. WritableSteganographyContainer s c p => c -> RndST s (Either String a)) -> RndST s (Either String a)
+  withSteganographyContainer :: a -> (forall c p. WritableSteganographyContainer s c p => c -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
+  unsafeWithSteganographyContainer :: a -> (forall c p. WritableSteganographyContainer s c p => c -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
 
   readBytes state len = readBits state (len * 8) >>= (return . BiS.realizeBitStringLazy)
   unsafeWithSteganographyContainer = withSteganographyContainer
