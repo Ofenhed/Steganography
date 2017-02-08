@@ -1,6 +1,6 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE RankNTypes #-}
-module SteganographyContainer (SteganographyContainer(..), WritableSteganographyContainer(..)) where
+module SteganographyContainer (SteganographyContainer(..), WritableSteganographyContainer(..), SteganographyContainerOptions(..)) where
 
 import Control.Monad.ST (ST)
 import Crypto.RandomMonad (RndST)
@@ -10,32 +10,34 @@ import qualified Data.ByteString.Lazy as LBS
 
 byteSize = 8
 
-class SteganographyContainer s a where
-  createContainer :: LBS.ByteString -> ST s (Either String a)
-  withSteganographyContainer :: a -> (forall c p. WritableSteganographyContainer s c p => c -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
-  unsafeWithSteganographyContainer :: a -> (forall c p. WritableSteganographyContainer s c p => c -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
+class (SteganographyContainer b) => SteganographyContainerOptions a b | a -> b where
+  createContainer :: a -> LBS.ByteString -> ST s (Either String (b s))
+
+class SteganographyContainer a where
+  withSteganographyContainer :: a s -> (forall c p. WritableSteganographyContainer c p => c s -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
+  unsafeWithSteganographyContainer :: a s -> (forall c p. WritableSteganographyContainer c p => c s -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
 
   -- Readers
-  readBits :: a -> Word -> RndST s BiS.BitString
-  readSalt :: a -> Word -> RndST s LBS.ByteString
-  readBytes :: a -> Word -> RndST s LBS.ByteString
-  bytesAvailable :: a -> RndST s Word
+  readBits :: a s -> Word -> RndST s BiS.BitString
+  readSalt :: a s -> Word -> RndST s LBS.ByteString
+  readBytes :: a s -> Word -> RndST s LBS.ByteString
+  bytesAvailable :: a s -> RndST s Word
 
   -- Defaults
   readBytes state len = readBits state (len * byteSize) >>= (return . BiS.realizeBitStringLazy)
   unsafeWithSteganographyContainer = withSteganographyContainer
 
-class WritableSteganographyContainer s a p | a -> p where
+class WritableSteganographyContainer a p | a -> p where
   -- With primitives
-  getPrimitives :: a -> Word -> RndST s p
-  writeBitsP :: a -> p -> BiS.BitString -> RndST s (Either String ())
-  writeBytesP :: a -> p -> LBS.ByteString -> RndST s (Either String ())
+  getPrimitives :: a s -> Word -> RndST s p
+  writeBitsP :: a s -> p -> BiS.BitString -> RndST s (Either String ())
+  writeBytesP :: a s -> p -> LBS.ByteString -> RndST s (Either String ())
 
   -- Without primitives
-  writeBits :: a -> BiS.BitString -> RndST s (Either String ())
-  writeBytes :: a -> LBS.ByteString -> RndST s (Either String ())
+  writeBits :: a s -> BiS.BitString -> RndST s (Either String ())
+  writeBytes :: a s -> LBS.ByteString -> RndST s (Either String ())
 
-  storageAvailable :: a -> RndST s (Maybe Word)
+  storageAvailable :: a s -> RndST s (Maybe Word)
   storageAvailable _ = return Nothing
 
   -- Defaults

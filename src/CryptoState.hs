@@ -133,7 +133,7 @@ createSignatureState filename = do
        k@(Just (PrivatePkiEcc _)) -> k
        _ -> throw CouldNotReadPkiFileException
 
-addSignature :: WritableSteganographyContainer s a p => Maybe PrivatePki -> [Word8] -> a -> RndST s (Either String ())
+addSignature :: WritableSteganographyContainer a p => Maybe PrivatePki -> [Word8] -> a s -> RndST s (Either String ())
 addSignature Nothing _ _ = return $ Right ()
 addSignature (Just (PrivatePkiEcc key)) msg writer = do
   let key' = EccKeys.getSecretSignKey key

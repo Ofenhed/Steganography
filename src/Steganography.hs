@@ -1,6 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
-
 module Steganography (doEncrypt, doDecrypt, SteganographyExceptions(..)) where
 
 import Codec.Picture.Png (decodePngWithMetadata, encodePngWithMetadata, decodePng)
@@ -18,10 +15,9 @@ import Data.Time (getCurrentTime, diffUTCTime, UTCTime, secondsToDiffTime)
 import Data.Typeable (Typeable)
 import Data.Word (Word8)
 import HashedData (readUntilHash, writeAndHash)
-import SteganographyContainer (storageAvailable)
 import Pbkdf2 (hmacSha512Pbkdf2)
-import Png.PngContainer (PngImage)
-import SteganographyContainer (createContainer, withSteganographyContainer)
+import Png.PngContainer (PngImage, PngImageType)
+import SteganographyContainer (createContainer, withSteganographyContainer, SteganographyContainerOptions, storageAvailable)
 
 import qualified Data.BitString as BS
 import qualified Data.ByteArray as BA
@@ -42,14 +38,14 @@ blockSecretCertificateAsInput inputData = do
   let inputCertificate = EccKeys.decodeSecretKey inputData
   when (isJust inputCertificate) $ throw TriedToEncryptSecretCertificateException
 
-doEncrypt imageFile secretFile loops inputData salt pkiFile signFile fastMode = do
+doEncrypt imageFile containerType secretFile loops inputData salt pkiFile signFile = do
   let input = inputData
   blockSecretCertificateAsInput $ LBS.toStrict inputData
   publicKeyState <- createPublicKeyState pkiFile
   let signState = createSignatureState signFile
       --Right (dynamicImage, metadata) = decodePngWithMetadata imageFile
       newImage = runST $ do
-        container <- createContainer imageFile :: ST s (Either String (PngImage s))
+        container <- createContainer containerType imageFile
         case container of
           Left err -> return $ Left $ "Could not read image file"
           Right container' -> do
@@ -80,11 +76,11 @@ doEncrypt imageFile secretFile loops inputData salt pkiFile signFile fastMode = 
             return result 
   return newImage
 
-doDecrypt imageFile secretFile loops salt pkiFile signFile = do
+doDecrypt imageFile containerType secretFile loops salt pkiFile signFile = do
   verifySignState <- createVerifySignatureState signFile
   let privateKey = readPrivateKey pkiFile
       hiddenData = runST $ do
-        container <- createContainer imageFile :: ST s (Either String (PngImage s))
+        container <- createContainer containerType imageFile
         case container of
           Left err -> error "" -- TODO: Make sure this compiles with Left
           Right reader -> do

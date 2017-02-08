@@ -1,5 +1,6 @@
 import Steganography (doEncrypt, doDecrypt)
 import EccKeys (generateKeyPair, SecretKeyPath(..), PublicKeyPath(..))
+import Png.PngContainer (PngImageType(..))
 
 import Control.Monad (when)
 import Data.Either (isRight)
@@ -34,7 +35,7 @@ doEncrypt' imageFile secretFile loops inputFile salt pkiFile signFile fastMode =
   inputData <- readOrEmpty inputFile
   pkiData <- readOrEmpty pkiFile
   signData <- lazyReadOrEmpty signFile
-  encrypted <- doEncrypt imageData secretData loops inputData salt pkiData signData fastMode
+  encrypted <- doEncrypt imageData (if fastMode then PngImageSpawnerFast else PngImageSpawner) secretData loops inputData salt pkiData signData
   case encrypted of
     Left err -> error err
     Right encrypted' -> C8.writeFile imageFile encrypted'
@@ -44,7 +45,7 @@ doDecrypt' imageFile secretFile loops output salt pkiFile signFile = do
   secretData <- readOrEmpty secretFile
   pkiData <- lazyReadOrEmpty pkiFile
   signData <- readOrEmpty signFile
-  decrypted <- doDecrypt imageData secretData loops salt pkiData signData
+  decrypted <- doDecrypt imageData PngImageSpawner secretData loops salt pkiData signData
   case decrypted of
     Left err -> error err
     Right decrypted' -> C8.writeFile output decrypted'

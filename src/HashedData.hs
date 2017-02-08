@@ -40,7 +40,7 @@ signatureFinalize (SignatureHash s1 s2 s3 s4) = hash
   s3' = finalize s3
   s4' = finalize s4
 
-writeAndHash :: WritableSteganographyContainer s a p => a -> LBS.ByteString -> RndST s (Either String [Word8])
+writeAndHash :: WritableSteganographyContainer a p => a s -> LBS.ByteString -> RndST s (Either String [Word8])
 writeAndHash writer input = do
   let blockSize = hashDigestSize SHA1
   hashPosition <- getPrimitives writer (fromIntegral $ 8 * blockSize)
