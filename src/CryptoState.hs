@@ -3,7 +3,7 @@
 
 module CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature) where
 
-import SteganographyContainer (readBytes, writeBytes, writeBytesP, getPrimitives, readSalt, bytesAvailable, WritableSteganographyContainer(..))
+import SteganographyContainer (readBytes, writeBytes, writeBytesP, getPrimitives, readSalt, bitsAvailable, WritableSteganographyContainer(..))
 import safe AesEngine (createAes256RngState)
 import safe Pbkdf2 (hmacSha512Pbkdf2)
 
@@ -169,7 +169,7 @@ verifySignature (Just (PublicPkiEcc _ key)) msg reader = do
        _ -> throw CouldNotVerifySignature
 --------------------------------------------------------------------------------
 createRandomStates reader salt minimumEntropyBytes = do
-  saltLength' <- bytesAvailable reader
+  saltLength' <- bitsAvailable reader
   let saltLength = quot saltLength' 30
   bigSalt <- readSalt reader $ saltLength
   extraSalt <- getRandomByteStringM $ max 0 $ minimumEntropyBytes - (fromIntegral $ quot saltLength 8)

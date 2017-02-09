@@ -22,10 +22,16 @@ class SteganographyContainer a where
   readSalt :: a s -> Word -> RndST s LBS.ByteString
   readBytes :: a s -> Word -> RndST s LBS.ByteString
   bytesAvailable :: a s -> RndST s Word
+  bitsAvailable :: a s -> RndST s Word
 
   -- Defaults
-  readBytes state len = readBits state (len * byteSize) >>= (return . BiS.realizeBitStringLazy)
+  readBytes state len = readBits state (len * byteSize) >>= return . BiS.realizeBitStringLazy
   unsafeWithSteganographyContainer = withSteganographyContainer
+  bytesAvailable state = bitsAvailable state >>= return . (*byteSize)
+  -- | Use 'len' bits of entropy as salt from the container. This function is
+  -- allowed to return more data than 'len', but not use any more of the
+  -- effective storage than 'len'.
+  readSalt state len = readBits state len >>= (return . BiS.realizeBitStringLazy)
 
 class WritableSteganographyContainer a p | a -> p where
   -- With primitives

@@ -28,10 +28,6 @@ import qualified Png.ImageFileHandler as A
 data WritablePngImage pixel s = (PT.Pixel pixel, PngSavable pixel, Bits (PT.PixelBaseComponent pixel)) => WritablePngImage (PT.MutableImage s pixel) (A.PixelInfo s)
 
 instance WritableSteganographyContainer (WritablePngImage a) [A.CryptoPrimitive] where
-  getPrimitives :: WritablePngImage a s -> Word -> RndST s [A.CryptoPrimitive]
-  writeBitsP :: WritablePngImage a s -> [A.CryptoPrimitive] -> BiS.BitString -> RndST s (Either String ())
-
-  -- Definitions
   getPrimitives (WritablePngImage image info) = A.getCryptoPrimitives info
   writeBitsP (WritablePngImage image info) prim bits = lift $ A.writeBits_ prim info image bits
 
@@ -41,22 +37,15 @@ data PngImageType = PngImageSpawner
                   | PngImageSpawnerFast
 
 instance SteganographyContainerOptions PngImageType PngImage where
-  createContainer :: PngImageType -> LBS.ByteString -> ST s (Either String (PngImage s))
   createContainer options imagedata = case decodePngWithMetadata (LBS.toStrict imagedata) of
                                 Right (dynamicImage, metadata) -> A.createCryptoState (case options of PngImageSpawnerFast -> True ; PngImageSpawner -> False) dynamicImage >>= \(element, otherthing) -> return $ Right $ PngImage dynamicImage (element, otherthing, metadata)
                                 Left _ -> return $ Left "Could not decode"
 
 instance SteganographyContainer (PngImage) where
-  -- Readers
-  readBits :: (PngImage s) -> Word -> RndST s BiS.BitString
-  readSalt :: (PngImage s) -> Word -> RndST s LBS.ByteString
-  bytesAvailable :: (PngImage s) -> RndST s Word
-
-  -- Definitions
   readSalt (PngImage i info) count = A.readSalt info i count
   readBits (PngImage i info) count = A.readBits info i (fromIntegral count)
 
-  bytesAvailable (PngImage i (elements, _, _)) = randomElementsLength elements >>= return . fromIntegral
+  bitsAvailable (PngImage i (elements, _, _)) = randomElementsLength elements >>= return . fromIntegral
 
   unsafeWithSteganographyContainer (PngImage image info@(_, _, metadata)) func = A.pngDynamicMap (\img -> do
       thawed <- unsafeThawImage img
