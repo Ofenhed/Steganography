@@ -17,7 +17,7 @@ import Data.Word (Word8)
 import HashedData (readUntilHash, writeAndHash)
 import Pbkdf2 (hmacSha512Pbkdf2)
 import Png.PngContainer (PngImage, PngImageType)
-import SteganographyContainer (createContainer, withSteganographyContainer, SteganographyContainerOptions, storageAvailable)
+import SteganographyContainer (createContainer, withSteganographyContainer, SteganographyContainerOptions, storageAvailableBytes)
 
 import qualified Data.BitString as BS
 import qualified Data.ByteArray as BA
@@ -61,7 +61,7 @@ doEncrypt imageFile containerType secretFile loops inputData salt pkiFile signFi
 
                 addAdditionalPublicPkiState publicKeyState writer
                 let dataLen = LBS.length input
-                availLen <- storageAvailable writer
+                availLen <- storageAvailableBytes writer
                 if isJust availLen && (fromIntegral $ fromJust availLen) < (fromIntegral dataLen)
                    then return $ Left $ "Trying to fid " ++ (show dataLen) ++ " bytes in an image with " ++ (show $ fromJust availLen) ++ " bytes available"
                    else do
