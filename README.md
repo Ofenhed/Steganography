@@ -38,8 +38,8 @@ The salt is not considered part of the secret, so including it with the picture 
 
 > Alice sends a picture to Bob in a mail. Besides the mail is the text "Check out this picture of my cute little Eve. She turned 3 today.". She uses the salt `Check out this picture of my cute little Eve. She turned 3 today.` for the encryption. A list **should** be kept of all salts used to make sure that the same salt isn't used twice.
 
-## What the program does for you
-If you do use the same password and salt every time, but change the picture, the program will still be extremely unlikely to create the same key stream for the secret data because a huge additional salt is read out from the picture before any sensitive data is added. It will, however, read out the salt (which consists of 1/30 of the picture chosen based on the secret) from the same positions in every picture you use (if the picture is of the same size), so there is still a tiny loss in security by not changing the salt.
+## What the program does to protect you
+If you do use the same password and salt every time, but change the picture, the program will still not create the same key stream for the secret data because a huge additional salt is read out from the picture before any sensitive data is added.
 
 ## Technical description
 
