@@ -73,7 +73,7 @@ doEncrypt imageFile containerType secretFile loops inputData salt pkiFile signFi
                          case signResult of
                            Left err -> return $ Left err
                            Right () -> return $ Right ()
-            return result 
+            return result
   return newImage
 
 doDecrypt imageFile containerType secretFile loops salt pkiFile signFile = do

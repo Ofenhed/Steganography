@@ -1,6 +1,7 @@
 import Steganography (doEncrypt, doDecrypt)
 import EccKeys (generateKeyPair, SecretKeyPath(..), PublicKeyPath(..))
 import Png.PngContainer (PngImageType(..))
+import DummyContainer (DummyContainer(..))
 
 import Control.Monad (when)
 import Data.Either (isRight)
@@ -19,6 +20,7 @@ myCommands = Node
     Node encrypt [],
     Node decrypt [],
     Node generateKey [],
+    Node dummyEncrypt [],
     Node help []
   ]
 
@@ -27,7 +29,17 @@ lazyReadOrEmpty filename = LC8.readFile filename
 
 readOrEmpty [] = return C8.empty
 readOrEmpty filename = C8.readFile filename
-  
+
+doDryEncrypt' imageFile secretFile loops inputFile salt pkiFile signFile = do
+  imageData <- readOrEmpty imageFile
+  secretData <- readOrEmpty secretFile
+  inputData <- readOrEmpty inputFile
+  pkiData <- readOrEmpty pkiFile
+  signData <- lazyReadOrEmpty signFile
+  encrypted <- doEncrypt imageData DummyContainer secretData loops inputData salt pkiData signData
+  case encrypted of
+    Left err -> putStrLn $ "Error: " ++ err
+    Right encrypted' -> putStrLn $ "Result: " ++ (C8.unpack encrypted')
 
 doEncrypt' imageFile secretFile loops inputFile salt pkiFile signFile fastMode = do
   imageData <- readOrEmpty imageFile
@@ -50,10 +62,19 @@ doDecrypt' imageFile secretFile loops output salt pkiFile signFile = do
     Left err -> error err
     Right decrypted' -> C8.writeFile output decrypted'
 
-encrypt,decrypt,help :: Command IO
-encrypt = command "encrypt" "Encrypt and hide a file into a PNG file. Notice that it will overwrite the image file. SHARED-SECRET-FILE is the key. INT is the complexity of the PRNG function, higher takes longer time and is therefore more secure. INPUT-FILE is the file to be hidden in the image." $ 
+encrypt,decrypt,help,dummyEncrypt :: Command IO
+dummyEncrypt = command "dummy" "Do a dry run encryption which outputs exactly what would have been written to the Steganography container. Options are the same as for 'encrypt', except the image file will not be modified and fast mode is no longer an option." $
           withNonOption (namedFile "IMAGE-FILE") $ \image ->
-            withNonOption (namedFile "SHARED-SECRET-FILE") $ \secret -> 
+            withNonOption (namedFile "SHARED-SECRET-FILE") $ \secret ->
+              withNonOption Argument.integer $ \loops ->
+                withNonOption (namedFile "INPUT-FILE") $ \file ->
+                  withOption saltOption $ \salt ->
+                    withOption pkiFileOption $ \pkiFile ->
+                      withOption signatureOption $ \signFile -> io $ doDryEncrypt' image secret loops file (C8.pack salt) pkiFile signFile
+
+encrypt = command "encrypt" "Encrypt and hide a file into a PNG file. Notice that it will overwrite the image file. SHARED-SECRET-FILE is the key. INT is the complexity of the PRNG function, higher takes longer time and is therefore more secure. INPUT-FILE is the file to be hidden in the image." $
+          withNonOption (namedFile "IMAGE-FILE") $ \image ->
+            withNonOption (namedFile "SHARED-SECRET-FILE") $ \secret ->
               withNonOption Argument.integer $ \loops ->
                 withNonOption (namedFile "INPUT-FILE") $ \file ->
                   withOption saltOption $ \salt ->
@@ -63,7 +84,7 @@ encrypt = command "encrypt" "Encrypt and hide a file into a PNG file. Notice tha
 
 decrypt = command "decrypt" "Get data from a PNG file. Both the SHARED-SECRET-FILE and INT has to be the same as when the file was encrypted. OUTPUT-FILE will be overwritten without warning." $
           withNonOption (namedFile "IMAGE-FILE") $ \image ->
-            withNonOption (namedFile "SHARED-SECRET-FILE") $ \secret -> 
+            withNonOption (namedFile "SHARED-SECRET-FILE") $ \secret ->
               withNonOption Argument.integer $ \loops ->
                 withNonOption (namedFile "OUTPUT-FILE") $ \file ->
                   withOption saltOption $ \salt ->
