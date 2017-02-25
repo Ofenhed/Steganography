@@ -19,7 +19,7 @@ writeAndHash hashedDataContainer cryptoState writer input = do
     Left msg -> return $ Left msg
     Right hasher' -> do
 
-      signer <- signerInit cryptoState writer
+      signer <- signerInit cryptoState
       case signer of
         Left err -> return $ Left err
         Right signer' -> do
@@ -44,12 +44,7 @@ writeAndHash hashedDataContainer cryptoState writer input = do
           result <- writeAndHashRecursive input
           case result of
             Left msg -> return $ Left $ "Could not write and hash: " ++ msg
-            Right h1 -> signerFinalize cryptoState signer'
-              --let hash = LBS.pack $ BA.unpack h1
-              --writeResult <- writeBytesP writer hashPosition hash
-              --case writeResult of
-              --  Left msg -> return $ Left $ "Could not write hash: " ++ msg
-              --  Right () -> return $ Right ()
+            Right h1 -> signerFinalize cryptoState signer' writer
 
 readUntilHash hashedDataContainer cryptoState reader = do
   let blockSize = getHashSize hashedDataContainer
@@ -61,7 +56,7 @@ readUntilHash hashedDataContainer cryptoState reader = do
   case hasher of
     Left msg -> return $ Left msg
     Right hasher' -> do
-      verifier <- verifierInit cryptoState reader
+      verifier <- verifierInit cryptoState
       case verifier of
         Left msg -> return $ Left msg
         Right verifier' -> do
@@ -83,7 +78,7 @@ readUntilHash hashedDataContainer cryptoState reader = do
             Left err -> return $ Left err
             Right Nothing -> return $ Right Nothing
             Right (Just d) -> do
-              status <- verifierFinalize cryptoState verifier'
+              status <- verifierFinalize cryptoState verifier' reader
               case status of
                 Left err -> return $ Left err
                 Right Nothing -> return $ Right $ Just (d, False)

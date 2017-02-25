@@ -16,7 +16,7 @@ import Crypto.Hash (SHA1(..), SHA3_256(..), SHA3_512, SHA512, Skein512_512, Blak
 import Crypto.MAC.HMAC (Context, update, initialize, finalize, hmacGetDigest)
 import Crypto.PubKey.RSA.Types (private_size, Error(MessageTooLong), public_size)
 import Crypto.Random.Entropy (getEntropy)
-import Data.STRef (STRef, newSTRef)
+import Data.STRef (STRef, newSTRef, modifySTRef, readSTRef)
 import safe Control.Exception (Exception, throw)
 import safe Crypto.Error (CryptoFailable(CryptoPassed))
 import safe Crypto.RandomMonad (replaceSeedM, addSeedM, getRandomByteStringM, RndST, runRndT)
@@ -50,11 +50,27 @@ instance CryptoContainer DefaultCryptoState where
   runCrypto state func = runRndT [BiS.bitStringLazy $ hmacSha512Pbkdf2 (key state) (salt state) (iterations state)] func >>= \(result, _) -> return result
   initSymmetricCrypto state reader = createRandomStates reader (salt state) $ fromIntegral $ LBS.length $ key state
 
-data Dummy s = Dummy (STRef s Integer)
-instance EncryptionContainer DefaultCryptoState Dummy where
-  signerInit _ _ = do
-    createBigSignatureHash
-    return $ Right Nothing
+data EncryptionHolder s = EncryptionHolder PrivatePki (STRef s SignatureHash)
+instance EncryptionContainer DefaultCryptoState EncryptionHolder where
+  signerInit state = do
+    hash <- createBigSignatureHash
+    case privateKey state of
+      Nothing -> return $ Right Nothing
+      Just k -> do
+        let key = createSignatureState $ LBS.toStrict k
+        state' <- lift $ newSTRef hash
+        return $ Right $ Just $ EncryptionHolder key state'
+
+  signerAdd _ Nothing _ = return $ Right ()
+  signerAdd state (Just (EncryptionHolder _ hash)) d = do
+    lift $ modifySTRef hash (\h -> signatureUpdate h $ LBS.toStrict d)
+    return $ Right ()
+
+  signerFinalize _ Nothing _ = return $ Right ()
+  signerFinalize state (Just (EncryptionHolder key hash)) writer = do
+    hash' <- lift $ readSTRef hash
+    let hash'' = signatureFinalize hash'
+    addSignature key hash'' writer
 
   initAsymmetricEncrypter state writer = do
     case (publicKey state) of
@@ -64,11 +80,31 @@ instance EncryptionContainer DefaultCryptoState Dummy where
         addAdditionalPublicPkiState pubKey writer
         return $ Right ()
 
+data DecryptionHolder s = DecryptionHolder PublicPki (STRef s SignatureHash)
+instance DecryptionContainer DefaultCryptoState DecryptionHolder where
+  verifierInit state = do
+    hash <- createBigSignatureHash
+    case publicKey state of
+      Nothing -> return $ Right Nothing
+      Just k -> do
+        key <- lift $ createVerifySignatureState k
+        state' <- lift $ newSTRef hash
+        return $ Right $ Just $ DecryptionHolder key state'
 
-instance DecryptionContainer DefaultCryptoState Dummy where
-  verifierInit _ _ = do
-    createBigSignatureHash
-    return $ Right Nothing
+  verifierAdd _ Nothing _ = return $ Right ()
+  verifierAdd state (Just (DecryptionHolder _ hash)) d = do
+    lift $ modifySTRef hash (\h -> signatureUpdate h $ LBS.toStrict d)
+    return $ Right ()
+
+  verifierFinalize _ Nothing _ = return $ Right Nothing
+  verifierFinalize state (Just (DecryptionHolder key hash)) writer = do
+    hash' <- lift $ readSTRef hash
+    let hash'' = signatureFinalize hash'
+    verified <- verifySignature key hash'' writer
+    case verified of
+      False -> return $ Right $ Just False
+      True -> return $ Right $ Just True
+
 
   initAsymmetricDecrypter state reader = do
     case (privateKey state) of
@@ -203,9 +239,8 @@ createSignatureState filename = do
        k@(PrivatePkiEcc _) -> k
        _ -> throw CouldNotReadPkiFileException
 
-addSignature :: WritableSteganographyContainer a p => Maybe PrivatePki -> [Word8] -> a s -> RndST s (Either String ())
-addSignature Nothing _ _ = return $ Right ()
-addSignature (Just (PrivatePkiEcc key)) msg writer = do
+addSignature :: WritableSteganographyContainer a p => PrivatePki -> [Word8] -> a s -> RndST s (Either String ())
+addSignature (PrivatePkiEcc key) msg writer = do
   let key' = EccKeys.getSecretSignKey key
   case key' of
        Nothing -> return $ Left $ "Signature key not valid"
@@ -225,16 +260,15 @@ createVerifySignatureState filename = do
        k@(PublicPkiEcc _ _) -> return $ k
        _ -> throw CouldNotReadPkiFileException
 
-verifySignature Nothing _ _ = return Nothing
-verifySignature (Just (PublicPkiEcc _ key)) msg reader = do
+verifySignature (PublicPkiEcc _ key) msg reader = do
   signature <- readBytes reader $ 64 -- ED25519 signature size
   signatureSalt <- getRandomByteStringM 64
   let key' = EccKeys.getPublicSignKey key
   let signature' = ED.signature $ BS.pack $ LBS.unpack signature
   case (key', signature') of
        (Just k, CryptoPassed s) -> do
-         let toSign = BS.append (LBS.toStrict signatureSalt) msg
-         return $ Just $ ED.verify k toSign s
+         let toSign = BS.append (LBS.toStrict signatureSalt) $ BS.pack msg
+         return $ ED.verify k toSign s
        _ -> throw CouldNotVerifySignature
 --------------------------------------------------------------------------------
 createRandomStates reader salt minimumEntropyBytes = do
