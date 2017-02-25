@@ -43,6 +43,7 @@ class WritableSteganographyContainer a p | a -> p where
   -- | Get primitives which can be used to write on the current position of the
   -- writer stream later.
   getPrimitives :: a s -> Word -> RndST s p
+  getPrimitivesBytes :: a s -> Word -> RndST s p
   writeBitsP :: a s -> p -> BiS.BitString -> RndST s (Either String ())
   writeBytesP :: a s -> p -> LBS.ByteString -> RndST s (Either String ())
 
@@ -57,7 +58,7 @@ class WritableSteganographyContainer a p | a -> p where
   -- Defaults
   storageAvailableBits _ = return Nothing
   storageAvailableBytes state = storageAvailableBits state >>= \bits -> case bits of
-                                                                             Nothing -> return $ Nothing 
+                                                                             Nothing -> return $ Nothing
                                                                              Just size -> return $ Just $ size * byteSize
 
   writeBytes state bytes = do
@@ -69,3 +70,5 @@ class WritableSteganographyContainer a p | a -> p where
     writeBitsP state p bits
 
   writeBytesP state prim bytes = writeBitsP state prim $ BiS.bitStringLazy bytes
+
+  getPrimitivesBytes state bytes = getPrimitives state (bytes * byteSize)

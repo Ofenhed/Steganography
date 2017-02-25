@@ -1,7 +1,9 @@
-import Steganography (doEncrypt, doDecrypt)
+import DefaultCryptoState (DefaultCryptoState(..))
+import DefaultHashedData (DefaultHashedData(..))
+import DummyContainer (DummyContainer(..))
 import EccKeys (generateKeyPair, SecretKeyPath(..), PublicKeyPath(..))
 import Png.PngContainer (PngImageType(..))
-import DummyContainer (DummyContainer(..))
+import Steganography (doEncrypt, doDecrypt)
 
 import Control.Monad (when)
 import Data.Either (isRight)
@@ -36,7 +38,7 @@ doDryEncrypt' imageFile secretFile loops inputFile salt pkiFile signFile = do
   inputData <- readOrEmpty inputFile
   pkiData <- readOrEmpty pkiFile
   signData <- lazyReadOrEmpty signFile
-  encrypted <- doEncrypt imageData DummyContainer secretData loops inputData salt pkiData signData
+  encrypted <- doEncrypt DummyContainer (DefaultCryptoState secretData salt loops) DefaultHashedData imageData inputData --secretData loops salt pkiData signData
   case encrypted of
     Left err -> putStrLn $ "Error: " ++ err
     Right encrypted' -> putStrLn $ "Result: " ++ (C8.unpack encrypted')
@@ -47,7 +49,7 @@ doEncrypt' imageFile secretFile loops inputFile salt pkiFile signFile fastMode =
   inputData <- readOrEmpty inputFile
   pkiData <- readOrEmpty pkiFile
   signData <- lazyReadOrEmpty signFile
-  encrypted <- doEncrypt imageData (if fastMode then PngImageSpawnerFast else PngImageSpawner) secretData loops inputData salt pkiData signData
+  encrypted <- doEncrypt (if fastMode then PngImageSpawnerFast else PngImageSpawner) (DefaultCryptoState secretData salt loops) DefaultHashedData imageData inputData --salt pkiData signData
   case encrypted of
     Left err -> error err
     Right encrypted' -> C8.writeFile imageFile encrypted'
@@ -57,7 +59,7 @@ doDecrypt' imageFile secretFile loops output salt pkiFile signFile = do
   secretData <- readOrEmpty secretFile
   pkiData <- lazyReadOrEmpty pkiFile
   signData <- readOrEmpty signFile
-  decrypted <- doDecrypt imageData PngImageSpawner secretData loops salt pkiData signData
+  decrypted <- doDecrypt PngImageSpawner (DefaultCryptoState secretData salt loops) DefaultHashedData imageData -- pkiData signData
   case decrypted of
     Left err -> error err
     Right decrypted' -> C8.writeFile output decrypted'

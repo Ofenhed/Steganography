@@ -1,19 +1,24 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE Trustworthy #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
-module CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature) where
+module DefaultCryptoState (DefaultCryptoState(..)) where
 
+import CryptoContainer (CryptoContainer(..), EncryptionContainer(..), DecryptionContainer(..))
 import SteganographyContainer (readBytes, writeBytes, writeBytesP, getPrimitives, readSalt, bitsAvailable, WritableSteganographyContainer(..))
 import safe AesEngine (createAes256RngState)
 import safe Pbkdf2 (hmacSha512Pbkdf2)
 
 import Codec.Picture.Types (imageWidth, imageHeight)
-import Crypto.Hash (SHA3_256(..), hashDigestSize)
+import Control.Monad.Trans.Class (lift)
+import Crypto.Hash (SHA1(..), SHA3_256(..), SHA3_512, SHA512, Skein512_512, Blake2b_512, hashDigestSize, digestFromByteString, HashAlgorithm)
+import Crypto.MAC.HMAC (Context, update, initialize, finalize, hmacGetDigest)
 import Crypto.PubKey.RSA.Types (private_size, Error(MessageTooLong), public_size)
 import Crypto.Random.Entropy (getEntropy)
+import Data.STRef (STRef, newSTRef)
 import safe Control.Exception (Exception, throw)
 import safe Crypto.Error (CryptoFailable(CryptoPassed))
-import safe Crypto.RandomMonad (replaceSeedM, addSeedM, getRandomByteStringM, RndST)
+import safe Crypto.RandomMonad (replaceSeedM, addSeedM, getRandomByteStringM, RndST, runRndT)
 import safe Data.Maybe (isNothing, isJust, fromJust)
 import safe Data.Typeable (Typeable)
 import safe Data.Word (Word8)
@@ -29,6 +34,54 @@ import qualified PemData (readPublicKey, readPrivateKey)
 import safe qualified Data.ByteString as BS
 import safe qualified Data.ByteString.Lazy as LBS
 import safe qualified Data.ByteString.Lazy.Char8 as C8
+
+data DefaultCryptoState = DefaultCryptoState LBS.ByteString LBS.ByteString Integer
+
+instance CryptoContainer DefaultCryptoState where
+  runCrypto (DefaultCryptoState key salt iterations) func = runRndT [BiS.bitStringLazy $ hmacSha512Pbkdf2 key salt iterations] func >>= \(result, _) -> return result
+  initSymmetricCrypto (DefaultCryptoState key salt iterations) reader = createRandomStates reader salt $ fromIntegral $ LBS.length key
+
+data Dummy s = Dummy (STRef s Integer)
+instance EncryptionContainer DefaultCryptoState Dummy where
+  signerInit _ _ = do
+    createBigSignatureHash
+    return $ Right Nothing
+
+instance DecryptionContainer DefaultCryptoState Dummy where
+  verifierInit _ _ = do
+    createBigSignatureHash
+    return $ Right Nothing
+
+data SignatureHash = SignatureHash (Context SHA3_512) (Context SHA512) (Context Skein512_512) (Context Blake2b_512)
+
+createBigSignatureHash :: RndST s SignatureHash
+createBigSignatureHash = do
+  salt1 <- getRandomByteStringM 4096
+  salt2 <- getRandomByteStringM 4096
+  salt3 <- getRandomByteStringM 4096
+  salt4 <- getRandomByteStringM 4096
+
+  return $ SignatureHash (initialize (LBS.toStrict salt1))
+                         (initialize (LBS.toStrict salt2))
+                         (initialize (LBS.toStrict salt3))
+                         (initialize (LBS.toStrict salt4))
+
+signatureUpdate (SignatureHash s1 s2 s3 s4) d = (SignatureHash s1' s2' s3' s4')
+  where
+    s1' = update s1 d
+    s2' = update s2 d
+    s3' = update s3 d
+    s4' = update s4 d
+
+signatureFinalize (SignatureHash s1 s2 s3 s4) = hash
+  where
+  hash = concat [BA.unpack s1', BA.unpack s2', BA.unpack s3', BA.unpack s4']
+  s1' = finalize s1
+  s2' = finalize s2
+  s3' = finalize s3
+  s4' = finalize s4
+
+
 
 oaepParams = OAEP.defaultOAEPParams SHA3_256
 
@@ -179,3 +232,4 @@ createRandomStates reader salt minimumEntropyBytes = do
   aesSecret2 <- getRandomByteStringM 32
   addSeedM $ createAes256RngState $ LBS.toStrict aesSecret1
   addSeedM $ createAes256RngState $ LBS.toStrict aesSecret2
+  return $ Right ()
