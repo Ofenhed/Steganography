@@ -1,4 +1,4 @@
-import DefaultCryptoState (DefaultCryptoState(..))
+import DefaultCryptoState (DefaultCryptoState, createDefaultCryptoState, SecretKey(..), PkiSecret(..))
 import DefaultHashedData (DefaultHashedData(..))
 import DummyContainer (DummyContainer(..))
 import EccKeys (generateKeyPair, SecretKeyPath(..), PublicKeyPath(..))
@@ -38,7 +38,8 @@ doDryEncrypt' imageFile secretFile loops inputFile salt pkiFile signFile = do
   inputData <- readOrEmpty inputFile
   pkiData <- readOrEmpty pkiFile
   signData <- lazyReadOrEmpty signFile
-  encrypted <- doEncrypt DummyContainer (DefaultCryptoState secretData salt loops) DefaultHashedData imageData inputData --secretData loops salt pkiData signData
+  let cryptoState = createDefaultCryptoState (SecretKey secretData) salt loops Nothing Nothing
+  encrypted <- doEncrypt DummyContainer cryptoState DefaultHashedData imageData inputData
   case encrypted of
     Left err -> putStrLn $ "Error: " ++ err
     Right encrypted' -> putStrLn $ "Result: " ++ (C8.unpack encrypted')
@@ -49,7 +50,8 @@ doEncrypt' imageFile secretFile loops inputFile salt pkiFile signFile fastMode =
   inputData <- readOrEmpty inputFile
   pkiData <- readOrEmpty pkiFile
   signData <- lazyReadOrEmpty signFile
-  encrypted <- doEncrypt (if fastMode then PngImageSpawnerFast else PngImageSpawner) (DefaultCryptoState secretData salt loops) DefaultHashedData imageData inputData --salt pkiData signData
+  let cryptoState = createDefaultCryptoState (SecretKey secretData) salt loops Nothing Nothing
+  encrypted <- doEncrypt (if fastMode then PngImageSpawnerFast else PngImageSpawner) cryptoState DefaultHashedData imageData inputData
   case encrypted of
     Left err -> error err
     Right encrypted' -> C8.writeFile imageFile encrypted'
@@ -59,7 +61,8 @@ doDecrypt' imageFile secretFile loops output salt pkiFile signFile = do
   secretData <- readOrEmpty secretFile
   pkiData <- lazyReadOrEmpty pkiFile
   signData <- readOrEmpty signFile
-  decrypted <- doDecrypt PngImageSpawner (DefaultCryptoState secretData salt loops) DefaultHashedData imageData -- pkiData signData
+  let cryptoState = createDefaultCryptoState (SecretKey secretData) salt loops Nothing Nothing
+  decrypted <- doDecrypt PngImageSpawner cryptoState DefaultHashedData imageData -- pkiData signData
   case decrypted of
     Left err -> error err
     Right decrypted' -> C8.writeFile output decrypted'

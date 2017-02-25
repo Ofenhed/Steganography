@@ -2,7 +2,7 @@
 {-# LANGUAGE Trustworthy #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module DefaultCryptoState (DefaultCryptoState(..)) where
+module DefaultCryptoState (DefaultCryptoState, createDefaultCryptoState, SecretKey(..), PkiSecret(..)) where
 
 import CryptoContainer (CryptoContainer(..), EncryptionContainer(..), DecryptionContainer(..))
 import SteganographyContainer (readBytes, writeBytes, writeBytesP, getPrimitives, readSalt, bitsAvailable, WritableSteganographyContainer(..))
@@ -35,11 +35,19 @@ import safe qualified Data.ByteString as BS
 import safe qualified Data.ByteString.Lazy as LBS
 import safe qualified Data.ByteString.Lazy.Char8 as C8
 
-data DefaultCryptoState = DefaultCryptoState LBS.ByteString LBS.ByteString Integer
+data SecretKey = SecretKey LBS.ByteString
+data PkiSecret = PkiSecret LBS.ByteString
+
+data DefaultCryptoState = CryptoState { key :: LBS.ByteString, salt :: LBS.ByteString, iterations :: Integer, publicKey :: Maybe LBS.ByteString, privateKey :: Maybe LBS.ByteString }
+
+createDefaultCryptoState (SecretKey key) salt iterations publicKey pkiSecret =
+  case pkiSecret of
+    Nothing -> CryptoState key salt iterations publicKey Nothing
+    Just (PkiSecret s) -> CryptoState key salt iterations publicKey $ Just s
 
 instance CryptoContainer DefaultCryptoState where
-  runCrypto (DefaultCryptoState key salt iterations) func = runRndT [BiS.bitStringLazy $ hmacSha512Pbkdf2 key salt iterations] func >>= \(result, _) -> return result
-  initSymmetricCrypto (DefaultCryptoState key salt iterations) reader = createRandomStates reader salt $ fromIntegral $ LBS.length key
+  runCrypto state func = runRndT [BiS.bitStringLazy $ hmacSha512Pbkdf2 (key state) (salt state) (iterations state)] func >>= \(result, _) -> return result
+  initSymmetricCrypto state reader = createRandomStates reader (salt state) $ fromIntegral $ LBS.length $ key state
 
 data Dummy s = Dummy (STRef s Integer)
 instance EncryptionContainer DefaultCryptoState Dummy where
