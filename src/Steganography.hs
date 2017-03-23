@@ -7,8 +7,10 @@ import Control.Monad.ST (runST, ST())
 import Control.Monad.ST.Unsafe (unsafeIOToST)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad (when)
-import Crypto.RandomMonad (runRndT, newRandomElementST)
-import CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature)
+import Crypto.RandomMonad (newRandomElementST)
+import CryptoContainer (EncryptionContainer(..), DecryptionContainer(..), CryptoContainer(..))
+--import CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature)
+import DefaultCryptoState (DefaultCryptoState(..))
 import Data.Array.ST (STArray(), newArray)
 import Data.Maybe (isJust, fromJust)
 import Data.Time (getCurrentTime, diffUTCTime, UTCTime, secondsToDiffTime)
@@ -38,65 +40,55 @@ blockSecretCertificateAsInput inputData = do
   let inputCertificate = EccKeys.decodeSecretKey inputData
   when (isJust inputCertificate) $ throw TriedToEncryptSecretCertificateException
 
-doEncrypt imageFile containerType secretFile loops inputData salt pkiFile signFile = do
+doEncrypt containerType cryptoContainer hashedDataContainer imageFile inputData = do
   let input = inputData
   blockSecretCertificateAsInput $ LBS.toStrict inputData
-  publicKeyState <- createPublicKeyState pkiFile
-  let signState = createSignatureState signFile
-      --Right (dynamicImage, metadata) = decodePngWithMetadata imageFile
-      newImage = runST $ do
+
+  return $ runST $ do
         container <- createContainer containerType imageFile
         case container of
           Left err -> return $ Left $ "Could not read image file"
           Right container' -> do
-            (result, _) <- runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)] $ do
+            runCrypto cryptoContainer $ do
               do -- Seperate context for IO operations
                 timeBefore <- lift $ unsafeIOToST getCurrentTime
-                createRandomStates container' salt (fromIntegral $ LBS.length secretFile)
+                initSymmetricCrypto cryptoContainer container'
                 timeAfter <- lift $ unsafeIOToST getCurrentTime
                 let duration = diffUTCTime timeAfter timeBefore
                 lift $ unsafeIOToST $ putStrLn $ "Creating crypto context took " ++ (show $ duration)
-                when (duration < fromInteger warnIfFasterThanSeconds) $ lift $ unsafeIOToST $ putStrLn $ "This should take at least " ++ (show warnIfFasterThanSeconds) ++ " seconds. You should either change to a longer key or increase the iteration count."
-              withSteganographyContainer container' $ \writer -> do
+                when (duration < fromInteger warnIfFasterThanSeconds) $
+                  lift $ unsafeIOToST $
+                  putStrLn $ "This should take at least " ++
+                  (show warnIfFasterThanSeconds) ++ " seconds. You should either change to a longer key or increase the iteration count."
 
-                addAdditionalPublicPkiState publicKeyState writer
+              withSteganographyContainer container' $ \writer -> do
+                initAsymmetricEncrypter cryptoContainer writer
                 let dataLen = LBS.length input
                 availLen <- storageAvailableBytes writer
                 if isJust availLen && (fromIntegral $ fromJust availLen) < (fromIntegral dataLen)
-                   then return $ Left $ "Trying to fid " ++ (show dataLen) ++ " bytes in an image with " ++ (show $ fromJust availLen) ++ " bytes available"
+                   then return $ Left $
+                        "Trying to fid " ++ (show dataLen) ++
+                        " bytes in an image with " ++ (show $ fromJust availLen) ++ " bytes available"
                    else do
-                     hash' <- writeAndHash writer input
+                     hash' <- writeAndHash hashedDataContainer cryptoContainer writer input
                      case hash' of
                        Left err -> return $ Left err
-                       Right hash -> do
-                         signResult <- addSignature signState hash writer
-                         case signResult of
-                           Left err -> return $ Left err
-                           Right () -> return $ Right ()
-            return result
-  return newImage
+                       Right () -> return $ Right ()
 
-doDecrypt imageFile containerType secretFile loops salt pkiFile signFile = do
-  verifySignState <- createVerifySignatureState signFile
-  let privateKey = readPrivateKey pkiFile
-      hiddenData = runST $ do
+doDecrypt containerType cryptoContainer hashedDataContainer imageFile = do
+  let hiddenData = runST $ do
         container <- createContainer containerType imageFile
         case container of
-          Left err -> error "" -- TODO: Make sure this compiles with Left
+          Left err -> return $ Left err
           Right reader -> do
-            (result, _) <- runRndT [(BS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)] $ do
-              createRandomStates reader salt $ fromIntegral $ LBS.length secretFile
-              addAdditionalPrivatePkiState privateKey reader
-              hiddenData <- readUntilHash reader
+            runCrypto cryptoContainer $ do
+              initSymmetricCrypto cryptoContainer reader
+              initAsymmetricDecrypter cryptoContainer reader
+              hiddenData <- readUntilHash hashedDataContainer cryptoContainer reader
               case hiddenData of
-                   Nothing -> return $ Left "No hidden data found"
-                   Just (d, hash) -> do
-                     verify <- verifySignature verifySignState (LBS.toStrict hash) reader
-                     return $ Right (d, verify)
-            return result
+                Left err -> return $ Left err
+                Right Nothing -> return $ Left "No hidden data found"
+                Right (Just (d, verified)) -> return $ Right (d, verified)
   case hiddenData of
-            Left msg -> return $ Left msg
-            Right (x, Nothing) -> return $ Right x
-            Right (x, Just verified) -> if verified
-                                           then return $ Right x
-                                           else return $ Left "Found data but the signature was invalid"
+    Left msg -> return $ Left msg
+    Right (x, _) -> return $ Right x
