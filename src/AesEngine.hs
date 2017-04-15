@@ -12,7 +12,7 @@ import safe qualified Data.ByteString.Lazy as ByS
 
 createAes256RngState :: BySS.ByteString
                         -- ^ @aesKey@
-                        -> RndState
+                        -> [BS.BitString]
 createAes256RngState aesKey = if (BySS.length aesKey /= 32) then error "Faulty key data"
                                                            else  [BS.bitStringLazy $ generateStream True initialIv]
   where
