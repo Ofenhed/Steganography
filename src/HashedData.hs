@@ -68,7 +68,6 @@ writeAndHash writer input = do
   case result of
     Left msg -> return $ Left $ "Could not write and hash: " ++ msg
     Right (h1, h2) -> do
-      writeAndHashRecursive input hash' bigHashes
       let hash = LBS.pack $ BA.unpack h1
       writeResult <- writeBytesP writer hashPosition hash
       case writeResult of
