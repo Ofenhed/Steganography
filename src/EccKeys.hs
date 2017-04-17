@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module EccKeys (generateKeyPair, readPublicKey, readSecretKey, SecretKeyPath(..), PublicKeyPath(..), generateSecretKey, PublicEccKey(), SecretEccKey(), getSecretCryptoKey, getSecretSignKey, getPublicCryptoKey, getPublicSignKey, decodePublicKey, decodeSecretKey, saveKeyPair) where
+module EccKeys (generateKeyPair, readPublicKey, readSecretKey, SecretKeyPath(..), PublicKeyPath(..), generateSecretKey, PublicEccKey(), SecretEccKey(), getSecretCryptoKey, getSecretSignKey, getPublicCryptoKey, getPublicSignKey, decodePublicKey, decodeSecretKey, encodePublicKey, encodeSecretKey, saveKeyPair, toPublic) where
 
 import Control.Exception (Exception, throw)
 import Crypto.Random.Entropy (getEntropy)
