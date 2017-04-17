@@ -1,5 +1,5 @@
 import Steganography (doEncrypt, doDecrypt)
-import EccKeys (generateKeyPair, SecretKeyPath(..), PublicKeyPath(..))
+import EccKeys (saveKeyPair, SecretKeyPath(..), PublicKeyPath(..))
 import Png.PngContainer (PngImageType(..))
 import DummyContainer (DummyContainer(..))
 
@@ -92,7 +92,7 @@ decrypt = command "decrypt" "Get data from a PNG file. Both the SHARED-SECRET-FI
                       withOption signatureOption $ \signFile -> io $ doDecrypt' image secret loops file (C8.pack salt) pkiFile signFile
 
 generateKey = command "generateKey" "Generate Curve22519 keys. This will create two files, [filename].public.key and [filename].secret.key. To use these keys [filename].public.key is shared with anyone who wants to encrypt something for you. [filename].secret.key MUST NEVER BE SHARED!" $
-  withNonOption (namedFile "FILENAME") $ \filename -> io $ generateKeyPair (SecretKeyPath $ filename ++ ".secret.key", PublicKeyPath $ filename ++ ".public.key")
+  withNonOption (namedFile "FILENAME") $ \filename -> io $ saveKeyPair (SecretKeyPath $ filename ++ ".secret.key", PublicKeyPath $ filename ++ ".public.key")
 
 fastMode :: Argument.Option Bool
 fastMode = Argument.option ['q'] ["quick"] Argument.boolean False "Quick mode. This will simply write pixels instead of moving them around, which will be quicker but make Steganalysis (detection of hidden data) easier."

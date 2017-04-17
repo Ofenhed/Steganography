@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module EccKeys (generateKeyPair, readPublicKey, readSecretKey, SecretKeyPath(..), PublicKeyPath(..), generateSecretKey, PublicEccKey(), SecretEccKey(), getSecretCryptoKey, getSecretSignKey, getPublicCryptoKey, getPublicSignKey, decodePublicKey, decodeSecretKey) where
+module EccKeys (generateKeyPair, readPublicKey, readSecretKey, SecretKeyPath(..), PublicKeyPath(..), generateSecretKey, PublicEccKey(), SecretEccKey(), getSecretCryptoKey, getSecretSignKey, getPublicCryptoKey, getPublicSignKey, decodePublicKey, decodeSecretKey, saveKeyPair) where
 
 import Control.Exception (Exception, throw)
 import Crypto.Random.Entropy (getEntropy)
@@ -108,9 +108,13 @@ generateSecretKey = do
 
 toPublic (SecretEccKeyWithEd cryptoKey signKey) = PublicEccKeyWithEd (EC.toPublic cryptoKey) $ ED.toPublic signKey
 
-generateKeyPair (SecretKeyPath privKey, PublicKeyPath pubKey) = do
+generateKeyPair = do
   secretKey <- generateSecretKey
   let publicKey = toPublic secretKey
-  C8.writeFile pubKey $ encodePublicKey publicKey
-  C8.writeFile privKey $ encodeSecretKey secretKey
+  return (secretKey, publicKey)
+
+saveKeyPair (SecretKeyPath privKey, PublicKeyPath pubKey) = do
+  (privData, pubData) <- generateKeyPair
+  C8.writeFile pubKey $ encodePublicKey pubData
+  C8.writeFile privKey $ encodeSecretKey privData
 
