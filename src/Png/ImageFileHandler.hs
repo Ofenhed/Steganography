@@ -26,7 +26,7 @@ import qualified Data.ByteString.Lazy as ByS
 data CryptoPrimitive = CryptoPrimitive (Png.PixelStream.Pixel) (Bool) deriving (Show)
 type CryptoStream = [CryptoPrimitive]
 
-type PixelInfo s = (RandomElementsListST s Pixel, Maybe (STArray s (Int, Int) [Bool]), Metadatas)
+type PixelInfo s = (RandomElementsListST Pixel s, Maybe (STArray s (Int, Int) [Bool]), Metadatas)
 
 createCryptoState fastMode dynamicImage = do
   let w = I.dynamicMap I.imageWidth dynamicImage
@@ -197,7 +197,7 @@ writeBitsSafer (_, Just usedPixels, _) image@(I.MutableImage { I.mutableImageDat
            I.writePixel image x y newCurrentPixel
            I.writePixel image x' y' newOtherPixel
            return $ Right ()
-  
+
 
 writeBits_ primitives pixels@(_, pixelStatus,_) image bits = if length primitives < (fromIntegral $ BS.length bits)
                                              then return $ Left "Got more data that crypto primitives"
