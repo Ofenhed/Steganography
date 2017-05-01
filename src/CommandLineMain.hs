@@ -1,6 +1,6 @@
 import Steganography (doEncrypt, doDecrypt)
 import EccKeys (saveKeyPair, SecretKeyPath(..), PublicKeyPath(..))
-import SteganographyImage.Png.PngContainer (PngImageType(..))
+import Container.LosslessImage.Png.PngContainer (PngImageType(..))
 import DummyContainer (DummyContainer(..))
 
 import Control.Monad (when)

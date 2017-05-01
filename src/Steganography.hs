@@ -16,7 +16,7 @@ import Data.Typeable (Typeable)
 import Data.Word (Word8)
 import HashedData (readUntilHash, writeAndHash)
 import Pbkdf2 (hmacSha512Pbkdf2)
-import SteganographyImage.Png.PngContainer (PngImage, PngImageType)
+import Container.LosslessImage.Png.PngContainer (PngImage, PngImageType)
 import SteganographyContainer (createContainer, withSteganographyContainer, SteganographyContainerOptions, storageAvailableBytes)
 
 import qualified Data.BitString as BS

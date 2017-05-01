@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE Rank2Types #-}
 
-module SteganographyImage.Png.ImageFileHandler (readBits, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException, DifferentBetweenSizeOfPrimitivesAndDataLength), CryptoPrimitive, createCryptoState, PixelInfo) where
+module Container.LosslessImage.Png.ImageFileHandler (readBits, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException, DifferentBetweenSizeOfPrimitivesAndDataLength), CryptoPrimitive, createCryptoState, PixelInfo) where
 
 import Codec.Picture.Png (PngSavable)
 import Codec.Picture.Metadata (Metadatas)
@@ -16,14 +16,14 @@ import Data.Bits (Bits, xor, shift, (.&.), complement, (.|.))
 import Data.Maybe (isNothing, isJust, fromJust)
 import Data.Typeable (Typeable)
 import Data.Word (Word8)
-import SteganographyImage.ImageContainer (Pixel, getPixels)
+import Container.LosslessImage.ImageContainer (Pixel, getPixels)
 import Data.List (find)
 
 import qualified Codec.Picture.Types as I
 import qualified Data.BitString as BS
 import qualified Data.ByteString.Lazy as ByS
 
-data CryptoPrimitive = CryptoPrimitive (SteganographyImage.ImageContainer.Pixel) (Bool) deriving (Show)
+data CryptoPrimitive = CryptoPrimitive (Container.LosslessImage.ImageContainer.Pixel) (Bool) deriving (Show)
 type CryptoStream = [CryptoPrimitive]
 
 type PixelInfo s = (RandomElementsListST Pixel s, Maybe (STArray s (Int, Int) [Bool]), Metadatas)
