@@ -16,14 +16,14 @@ import Data.Bits (Bits, xor, shift, (.&.), complement, (.|.))
 import Data.Maybe (isNothing, isJust, fromJust)
 import Data.Typeable (Typeable)
 import Data.Word (Word8)
-import SteganographyImage.Png.PixelStream (Pixel, getPixels)
+import SteganographyImage.ImageContainer (Pixel, getPixels)
 import Data.List (find)
 
 import qualified Codec.Picture.Types as I
 import qualified Data.BitString as BS
 import qualified Data.ByteString.Lazy as ByS
 
-data CryptoPrimitive = CryptoPrimitive (SteganographyImage.Png.PixelStream.Pixel) (Bool) deriving (Show)
+data CryptoPrimitive = CryptoPrimitive (SteganographyImage.ImageContainer.Pixel) (Bool) deriving (Show)
 type CryptoStream = [CryptoPrimitive]
 
 type PixelInfo s = (RandomElementsListST Pixel s, Maybe (STArray s (Int, Int) [Bool]), Metadatas)

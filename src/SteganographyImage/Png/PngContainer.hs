@@ -16,7 +16,7 @@ import Crypto.RandomMonad (randomElementsLength, RandomElementsListST(), RndST)
 import Data.Array.ST (STArray())
 import Data.Bits (Bits)
 import Data.Word (Word32, Word8)
-import SteganographyImage.Png.PixelStream (Pixel, getPixels)
+import SteganographyImage.ImageContainer (Pixel, getPixels)
 import SteganographyContainer (SteganographyContainer(..), WritableSteganographyContainer(..), SteganographyContainerOptions(..))
 
 import qualified Codec.Picture.Types as PT
