@@ -4,7 +4,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE RankNTypes #-}
-module Png.PngContainer (PngImage(..), PngImageType(..)) where
+module SteganographyImage.Png.PngContainer (PngImage(..), PngImageType(..)) where
 
 import Codec.Picture.Metadata (Metadatas)
 import Codec.Picture.Png (decodePngWithMetadata, encodePngWithMetadata)
@@ -16,14 +16,14 @@ import Crypto.RandomMonad (randomElementsLength, RandomElementsListST(), RndST)
 import Data.Array.ST (STArray())
 import Data.Bits (Bits)
 import Data.Word (Word32, Word8)
-import Png.PixelStream (Pixel, getPixels)
+import SteganographyImage.Png.PixelStream (Pixel, getPixels)
 import SteganographyContainer (SteganographyContainer(..), WritableSteganographyContainer(..), SteganographyContainerOptions(..))
 
 import qualified Codec.Picture.Types as PT
 import qualified Data.BitString as BiS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy as LBS
-import qualified Png.ImageFileHandler as A
+import qualified SteganographyImage.Png.ImageFileHandler as A
 
 data WritablePngImage pixel s = (PT.Pixel pixel, PngSavable pixel, Bits (PT.PixelBaseComponent pixel)) => WritablePngImage (PT.MutableImage s pixel) (A.PixelInfo s)
 
@@ -55,7 +55,7 @@ instance SteganographyContainer (PngImage) where
         Right _ -> do
           frozen <- unsafeFreezeImage thawed
           return $ Right $ encodePngWithMetadata metadata frozen) image
-  
+
   withSteganographyContainer (PngImage image info@(_, _, metadata)) func = A.pngDynamicMap (\img -> do
       thawed <- thawImage img
       result <- func $ WritablePngImage thawed info
