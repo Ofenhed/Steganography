@@ -6,7 +6,6 @@
 {-# LANGUAGE RankNTypes #-}
 module Container.LosslessImage.Png.PngContainer (PngImage(..), PngImageType(..)) where
 
-import Codec.Picture.Metadata (Metadatas)
 import Codec.Picture.Png (decodePngWithMetadata, encodePngWithMetadata)
 import Codec.Picture.Png (PngSavable)
 import Codec.Picture.Types (thawImage, unsafeThawImage, unsafeFreezeImage, freezeImage)
