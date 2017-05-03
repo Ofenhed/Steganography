@@ -2,16 +2,13 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-module Container.LosslessImage.ImageBindings (WithPixelInfoType(..), WithPixelInfoTypeM(..)) where
+module Container.LosslessImage.ImageBindings where
 
-import Container.LosslessImage.ImageContainer (ImageContainer(..), MutableImageContainer(..), Pixel, getPixels)
+import Container.LosslessImage.ImageContainer (ImageContainer(..), MutableImageContainer(..), Pixel, getPixels, WithPixelInfoTypeM(..), WithPixelInfoType(..))
 import SteganographyContainer (SteganographyContainer(..), WritableSteganographyContainer(..), SteganographyContainerOptions(..))
 import Crypto.RandomMonad (randomElementsLength)
 import Container.LosslessImage.ImageHandler (CryptoPrimitive, CryptoStream, getCryptoPrimitives, readSalt, readBits, writeBits_, PixelInfo)
 import Control.Monad.Trans.Class (lift)
-
-data WithPixelInfoType a s = WithPixelInfoType a (PixelInfo s)
-data WithPixelInfoTypeM a s = WithPixelInfoTypeM (a s) (PixelInfo s)
 
 instance MutableImageContainer thawed => WritableSteganographyContainer (WithPixelInfoTypeM thawed) CryptoStream where
   getPrimitives (WithPixelInfoTypeM _ info) = getCryptoPrimitives info
@@ -29,5 +26,5 @@ instance ImageContainer img => SteganographyContainer (WithPixelInfoType img) wh
 
   bitsAvailable (WithPixelInfoType _ (list, _)) = randomElementsLength list >>= return . fromIntegral
 
-  withSteganographyContainer (WithPixelInfoType image _) func = withThawedImage image func
+  withSteganographyContainer (WithPixelInfoType image state) func = withThawedImage image state func
 

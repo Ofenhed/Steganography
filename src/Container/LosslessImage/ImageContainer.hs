@@ -3,14 +3,20 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE RankNTypes #-}
 
-module Container.LosslessImage.ImageContainer (ImageContainer(..), MutableImageContainer(..), Pixel, getPixels) where
+module Container.LosslessImage.ImageContainer (ImageContainer(..), MutableImageContainer(..), Pixel, getPixels, WithPixelInfoType(..), WithPixelInfoTypeM(..), PixelInfo(..)) where
 
 import Data.BitString as BS
 import safe Control.Monad.ST (ST)
 import safe Data.Word (Word32, Word8)
 import Data.ByteString.Lazy as LBS
+import Crypto.RandomMonad (RandomElementsListST())
+import Data.Array.ST (STArray)
 import Crypto.RandomMonad (RndST)
 import SteganographyContainer (WritableSteganographyContainer(..))
+
+data WithPixelInfoType a s = WithPixelInfoType a (PixelInfo s)
+data WithPixelInfoTypeM a s = WithPixelInfoTypeM (a s) (PixelInfo s)
+type PixelInfo s = (RandomElementsListST Pixel s, Maybe (STArray s (Int, Int) [Bool]))
 
 type Pixel = (Word32, Word32, Word8)
 
@@ -27,8 +33,8 @@ class ImageContainer img where
   getBounds :: img -> (Word32, Word32, Word8)
   getPixelLsb :: img -> (Word32, Word32, Word8) -> Bool
   getPixel :: img -> (Word32, Word32, Word8) -> Word32
-  withThawedImage :: img -> (forall p. WritableSteganographyContainer thawed p => thawed s -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
-  unsafeWithThawedImage :: img -> (forall p. WritableSteganographyContainer thawed p => thawed s -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
+  withThawedImage :: img -> PixelInfo s -> (forall c p. WritableSteganographyContainer c p => c s -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
+  unsafeWithThawedImage :: img -> PixelInfo s -> (forall c p. WritableSteganographyContainer c p => c s -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
   -- Defaults
   unsafeWithThawedImage = withThawedImage
 

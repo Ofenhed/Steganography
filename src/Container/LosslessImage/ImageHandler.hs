@@ -1,4 +1,4 @@
-module Container.LosslessImage.ImageHandler (CryptoPrimitive, CryptoStream, getCryptoPrimitives, readSalt, readBits_, writeBits_, PixelInfo, readBits, createCryptoState) where
+module Container.LosslessImage.ImageHandler (CryptoPrimitive, CryptoStream, getCryptoPrimitives, readSalt, readBits_, writeBits_, PixelInfo, readBits, createCryptoState, ImageFileHandlerExceptions(..)) where
 
 import Container.LosslessImage.ImageContainer as Container
 import Crypto.RandomMonad (RandomElementsListST(), RndST, newRandomElementST, getRandomElement, getRandomM)
@@ -9,7 +9,6 @@ import Control.Monad.ST (ST)
 import Data.List (find)
 import Data.Maybe (isNothing, isJust, fromJust)
 import Data.Either (isLeft)
-import Data.Array.ST (STArray)
 import Data.Typeable (Typeable)
 import Data.Bits (Bits, xor, shift, (.&.), complement, (.|.))
 import qualified Data.BitString as BiS
@@ -20,8 +19,6 @@ import Control.Monad (forM, when)
 
 data CryptoPrimitive = CryptoPrimitive (Container.Pixel) (Bool) deriving (Show)
 type CryptoStream = [CryptoPrimitive]
-
-type PixelInfo s = (RandomElementsListST Pixel s, Maybe (STArray s (Int, Int) [Bool]))
 
 
 createCryptoState fastMode dynamicImage = do

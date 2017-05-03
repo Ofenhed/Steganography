@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE Rank2Types #-}
 
-module Container.LosslessImage.Png.ImageFileHandler (readBits, readBits_, writeBits_, getCryptoPrimitives, readSalt, pngDynamicMap, pngDynamicComponentCount, ImageFileHandlerExceptions(UnsupportedFormatException, DifferentBetweenSizeOfPrimitivesAndDataLength), CryptoPrimitive, createCryptoState, PixelInfo) where
+module Container.LosslessImage.Png.ImageFileHandler (getColorAt, pngDynamicMap, pngDynamicComponentCount) where
 
 import Codec.Picture.Png (PngSavable)
 import Codec.Picture.Metadata (Metadatas)
@@ -17,6 +17,7 @@ import Data.Maybe (isNothing, isJust, fromJust)
 import Data.Typeable (Typeable)
 import Data.Word (Word8)
 import Container.LosslessImage.ImageContainer (Pixel, getPixels)
+import Container.LosslessImage.ImageHandler (ImageFileHandlerExceptions(UnsupportedFormatException))
 import Data.List (find)
 
 import qualified Codec.Picture.Types as I

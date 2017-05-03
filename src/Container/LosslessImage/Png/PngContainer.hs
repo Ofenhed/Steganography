@@ -14,13 +14,15 @@ import Control.Monad.ST (ST)
 import Control.Monad.Trans.Class (lift)
 import Crypto.RandomMonad (randomElementsLength, RandomElementsListST(), RndST)
 import Data.Array.ST (STArray())
-import Data.Bits (Bits)
+import Data.Bits (Bits, (.&.))
 import Data.Word (Word32, Word8)
 import Container.LosslessImage.ImageContainer (Pixel, getPixels, ImageContainer(..), MutableImageContainer(..))
 import Container.LosslessImage.ImageHandler (PixelInfo)
 import SteganographyContainer (SteganographyContainer(..), WritableSteganographyContainer(..), SteganographyContainerOptions(..))
 import Container.LosslessImage.ImageHandler (createCryptoState)
-import Container.LosslessImage.ImageBindings (WithPixelInfoType(..))
+import Container.LosslessImage.Png.ImageFileHandler (getColorAt, pngDynamicMap, pngDynamicComponentCount)
+import Container.LosslessImage.ImageContainer (WithPixelInfoType(..), WithPixelInfoTypeM(..))
+import Container.LosslessImage.ImageBindings ()
 
 import qualified Codec.Picture.Types as PT
 import qualified Data.BitString as BiS
@@ -29,10 +31,9 @@ import qualified Data.ByteString.Lazy as LBS
 
 -- Slow PNG Handling
 data PngImage = PngImage PT.DynamicImage Metadatas
-data MutablePngImage a s = MutablePngImage (PT.MutableImage a s)
 data PngImageType = PngImageSpawner
                   | PngImageSpawnerFast
-data WritablePngImage pixel s = (PT.Pixel pixel, PngSavable pixel, Bits (PT.PixelBaseComponent pixel)) => WritablePngImage (PT.MutableImage s pixel)
+data MutablePngImage pixel s = (PT.Pixel pixel, PngSavable pixel, Bits (PT.PixelBaseComponent pixel)) => MutablePngImage (PT.MutableImage s pixel)
 
 
 instance SteganographyContainerOptions PngImageType (WithPixelInfoType PngImage) where
@@ -41,11 +42,18 @@ instance SteganographyContainerOptions PngImageType (WithPixelInfoType PngImage)
                                 Left _ -> return $ Left "Could not decode"
 
 instance ImageContainer (PngImage) where
-  getBounds img = error "Not implemented"
-  getPixelLsb img (x, y, c) = error "Not implemented"
-  getPixel img (x, y, c) = error "Not implemnted"
-  withThawedImage img func = error "Not implemented"
+  getBounds (PngImage img _) = (fromIntegral $ PT.dynamicMap PT.imageWidth img, fromIntegral $ PT.dynamicMap PT.imageHeight img, fromIntegral $ pngDynamicComponentCount img)
+  getPixelLsb (PngImage img _) (x, y, c) = case getColorAt img (fromIntegral x) (fromIntegral y) (fromIntegral c) .&. 1 of 1 -> True ; 0 -> False
+  getPixel (PngImage img _) (x, y, c) = fromIntegral $ getColorAt img (fromIntegral x) (fromIntegral y) (fromIntegral c)
+  withThawedImage (PngImage image metadata) state func = pngDynamicMap (\img -> do
+    thawed <- thawImage img
+    result <- func $ WithPixelInfoTypeM (MutablePngImage thawed) state
+    case result of
+      Left err -> return $ Left err
+      Right _ -> do
+        frozen <- freezeImage thawed
+        return $ Right $ encodePngWithMetadata metadata frozen) image
 
-instance MutableImageContainer (WritablePngImage px) where
+instance MutableImageContainer (MutablePngImage px) where
   getBoundsM img = error "Not implemented"
   setPixelLsb img (x, y, c) b = error "Not implemented"
