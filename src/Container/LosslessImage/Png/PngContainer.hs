@@ -14,7 +14,7 @@ import Control.Monad.ST (ST)
 import Control.Monad.Trans.Class (lift)
 import Crypto.RandomMonad (randomElementsLength, RandomElementsListST(), RndST)
 import Data.Array.ST (STArray())
-import Data.Bits (Bits, (.&.))
+import Data.Bits (Bits, (.&.), complement, (.|.))
 import Data.Word (Word32, Word8)
 import Container.LosslessImage.ImageContainer (Pixel, getPixels, ImageContainer(..), MutableImageContainer(..))
 import Container.LosslessImage.ImageHandler (PixelInfo)
@@ -33,7 +33,7 @@ import qualified Data.ByteString.Lazy as LBS
 data PngImage = PngImage PT.DynamicImage Metadatas
 data PngImageType = PngImageSpawner
                   | PngImageSpawnerFast
-data MutablePngImage pixel s = (PT.Pixel pixel, PngSavable pixel, Bits (PT.PixelBaseComponent pixel)) => MutablePngImage (PT.MutableImage s pixel)
+data MutablePngImage pixel s = (PT.Pixel pixel, PngSavable pixel, Bits (PT.PixelBaseComponent pixel)) => MutablePngImage (Word32, Word32, Word8) (PT.MutableImage s pixel)
 
 
 instance SteganographyContainerOptions PngImageType (WithPixelInfoType PngImage) where
@@ -45,9 +45,9 @@ instance ImageContainer (PngImage) where
   getBounds (PngImage img _) = (fromIntegral $ PT.dynamicMap PT.imageWidth img, fromIntegral $ PT.dynamicMap PT.imageHeight img, fromIntegral $ pngDynamicComponentCount img)
   getPixelLsb (PngImage img _) (x, y, c) = case getColorAt img (fromIntegral x) (fromIntegral y) (fromIntegral c) .&. 1 of 1 -> True ; 0 -> False
   getPixel (PngImage img _) (x, y, c) = fromIntegral $ getColorAt img (fromIntegral x) (fromIntegral y) (fromIntegral c)
-  withThawedImage (PngImage image metadata) state func = pngDynamicMap (\img -> do
+  withThawedImage png@(PngImage image metadata) state func = pngDynamicMap (\img -> do
     thawed <- thawImage img
-    result <- func $ WithPixelInfoTypeM (MutablePngImage thawed) state
+    result <- func $ WithPixelInfoTypeM (MutablePngImage (getBounds png) thawed) state
     case result of
       Left err -> return $ Left err
       Right _ -> do
@@ -55,5 +55,21 @@ instance ImageContainer (PngImage) where
         return $ Right $ encodePngWithMetadata metadata frozen) image
 
 instance MutableImageContainer (MutablePngImage px) where
-  getBoundsM img = error "Not implemented"
-  setPixelLsb img (x, y, c) b = error "Not implemented"
+  getBoundsM (MutablePngImage bounds _) = return bounds
+  getPixelLsbM (MutablePngImage _ img@(PT.MutableImage { PT.mutableImageData = arr })) (x, y, c) = do
+         let (x', y') = (fromIntegral x, fromIntegral y)
+         originalPixel <- PT.readPixel img x' y'
+         let changedPixel = PT.mixWith (\color value _ ->
+               if color == fromIntegral c
+                  then value .&. (complement 1)
+                  else value) originalPixel originalPixel
+         return $ originalPixel /= changedPixel
+
+  setPixelLsb (MutablePngImage _ img) (x, y, c) b = do
+         let (x', y') = (fromIntegral x, fromIntegral y)
+         pixel <- PT.readPixel img x' y'
+         let pixel' = PT.mixWith (\color value _ ->
+               if color == fromIntegral c
+                  then (value .&. (complement 1)) .|. (if b then 1 else 0)
+                  else value) pixel pixel
+         PT.writePixel img x' y' pixel'

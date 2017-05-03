@@ -39,5 +39,6 @@ class ImageContainer img where
   unsafeWithThawedImage = withThawedImage
 
 class MutableImageContainer img where
+  getPixelLsbM :: img s -> (Word32, Word32, Word32) -> ST s Bool
   setPixelLsb :: img s -> (Word32, Word32, Word8) -> Bool -> ST s ()
   getBoundsM :: img s -> ST s (Word32, Word32, Word8)

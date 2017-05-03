@@ -108,53 +108,14 @@ findM f (x:xs) = do
      else findM f xs
 
 --writeBitsSafer (_, Just usedPixels) image x y color newBit = do
---  originalPixel <- forM (unsafeReadPixel x y
---  let newPixel = I.mixWith (\color' value _ ->
---        if color' == color
---           then (value .&. (complement 1)) .|. newBit
---           else value) originalPixel originalPixel
---
+--  currentPixel <- getPixelLsbM image x y color
 --  sourceSensitivity' <- readArray usedPixels (x, y)
---  let sourceSensitivity = zipWith (\prev index -> if index == color
---                                                     then True
---                                                     else prev) sourceSensitivity' [0..]
---  writeArray usedPixels (x, y) sourceSensitivity
---  if originalPixel == newPixel
+--  let sourceSensitivity = zipWithM (\prev index -> if index == color
+--                                                     then return $ True
+--                                                     else return $ prev) sourceSensitivity' [0..]
+--  if currentPixel == newBit
 --    then return $ Right ()
---    else do
---
---    let validPixel = I.mixWith (\_ _ _ -> 1) originalPixel originalPixel
---        overwritePixelLsb = I.mixWith (\_ value value2 -> (value .&. (complement 1)) .|. (value2 .&. 1))
---
---        canGo pixel1 pixel2 sensitivity = do
---          let possiblePixel = I.mixWith (\color' source dest -> let isUsed = sensitivity !! color'
---                                                                 in if (not isUsed) || source .&. 1 == dest .&. 1
---                                                                       then 1
---                                                                       else 0) pixel1 pixel2
---          return $ possiblePixel == validPixel
---
---        usable (x', y') = do
---          otherPixel <- unsafeReadPixel x' y'
---          sourceValid <- canGo otherPixel newPixel sourceSensitivity
---          if sourceValid
---             then do
---               targetSensitivity <- readArray usedPixels (x', y')
---               targetValid <- canGo originalPixel otherPixel targetSensitivity
---               return targetValid
---             else return False
---
---    foundIt <- findM usable $ let (width, height) = getBoundsM image in generateSeekPattern width height x y
---
---    case foundIt of
---         Nothing -> return $ Left "Could not find a pixel to trade with"
---         Just (x', y') -> do
---           otherPixel <- unsafeReadPixel x' y'
---           let newOtherPixel = overwritePixelLsb otherPixel originalPixel
---               newCurrentPixel = overwritePixelLsb originalPixel otherPixel
---           I.writePixel image x y newCurrentPixel
---           I.writePixel image x' y' newOtherPixel
---           return $ Right ()
-
+--    else return $ Right ()
 
 writeBits_ primitives pixels@(_, pixelStatus) image bits = if length primitives < (fromIntegral $ BiS.length bits)
                                              then return $ Left "Got more data that crypto primitives"
@@ -170,8 +131,8 @@ writeBits_ primitives pixels@(_, pixelStatus) image bits = if length primitives 
        then do
          setPixelLsb image (x, y, c) (xor inv bit)
          return $ Right ()
-       --else writeBitsSafer pixels image x' y' (fromIntegral c) newBit
-       else error "Safer not implemented"
+       --else writeBitsSafer pixels image x y c newBit
+       else error "WriteBitsSafer currently not implemented"
 
 readBits pixels image count = do
   primitives <- getCryptoPrimitives pixels count
