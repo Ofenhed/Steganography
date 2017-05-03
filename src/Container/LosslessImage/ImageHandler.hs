@@ -19,7 +19,7 @@ import Data.Word (Word32, Word8)
 import Data.Array.ST (STArray(), getBounds, writeArray, readArray, newArray)
 import Control.Monad (forM, when, zipWithM, zipWithM_)
 
-import Debug.Trace (traceShowM)
+import Debug.Trace (traceShowM, traceShowId)
 
 data CryptoPrimitive = CryptoPrimitive (Container.Pixel) (Bool) deriving (Show)
 type CryptoStream = [CryptoPrimitive]
@@ -80,7 +80,7 @@ readSalt pixels@(_,pixelStatus) image count = read [0..count-1] >>= return . ByS
     _ <- getRandomM $ fromIntegral result'
     return $ word32ToWord8List result'
 
-
+staticSeekPattern :: Integer -> Integer -> [(Integer, Integer)]
 staticSeekPattern width height = staticSeekPattern' (1, 0)
   where
   nextPixel (x, y) = let xBigger = abs x > abs y
@@ -95,9 +95,10 @@ staticSeekPattern width height = staticSeekPattern' (1, 0)
                             (False, _, _, True) -> (x-1, y)
                             (False, _, _, False) -> (x+1, y)
   staticSeekPattern' prev = prev:(staticSeekPattern'' $ nextPixel prev)
-  staticSeekPattern'' (x, y) = if x > width && y > height then [] else staticSeekPattern' (x, y)
+  staticSeekPattern'' (x, y) = if x > width && y > height then traceShowId [] else staticSeekPattern' (x, y)
 
 
+generateSeekPattern :: Integer -> Integer -> Integer -> Integer -> [(Integer, Integer)]
 generateSeekPattern width height x y = [(x'', y'') | (x', y') <- staticSeekPattern width height,
                                                            let x'' = x' + x; y'' = y' + y,
                                                            x'' >= 0 &&
@@ -138,7 +139,7 @@ writeBitsSafer (_, Just usedPixels) image x y color newBit = do
       usedPixelsBefore <- readArray usedPixels (fromIntegral x, fromIntegral y)
       lockedPixelsBefore <- rightLocked (x, y) usedPixelsBefore
 
-      let seekPattern = generateSeekPattern width height x y
+      let seekPattern = map (\(x, y) -> (fromInteger x, fromInteger y)) $ generateSeekPattern (fromIntegral width) (fromIntegral height) (fromIntegral x) (fromIntegral y)
       match <- findM (\(x', y') -> do
             lockedPixels' <- readArray usedPixels (fromIntegral x', fromIntegral y')
             current <- rightLocked (x', y') lockedPixels'
