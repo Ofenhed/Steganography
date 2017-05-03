@@ -1,4 +1,4 @@
-module Container.LosslessImage.ImageHandler (CryptoPrimitive, CryptoStream, getCryptoPrimitives, readSalt, readBits_, writeBits_, PixelInfo, readBits) where
+module Container.LosslessImage.ImageHandler (CryptoPrimitive, CryptoStream, getCryptoPrimitives, readSalt, readBits_, writeBits_, PixelInfo, readBits, createCryptoState) where
 
 import Container.LosslessImage.ImageContainer as Container
 import Crypto.RandomMonad (RandomElementsListST(), RndST, newRandomElementST, getRandomElement, getRandomM)
@@ -60,7 +60,7 @@ readBits_ primitives pixels image = BiS.fromList $ read primitives
 word32ToWord8List :: Word32 -> [Word8]
 word32ToWord8List w32 = map fromIntegral [shift w32 (-24), shift w32 (-16), shift w32 (-8), w32]
 
-readSalt :: ImageContainer const mut => PixelInfo s -> const -> Word -> RndST s ByS.ByteString
+readSalt :: ImageContainer const => PixelInfo s -> const -> Word -> RndST s ByS.ByteString
 readSalt pixels@(_,pixelStatus) image count = read [0..count-1] >>= return . ByS.pack . concat
   where
   read = mapM $ \_ -> do

@@ -3,7 +3,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE RankNTypes #-}
 
-module Container.LosslessImage.ImageContainer (ImageContainer(..), Pixel, getPixels) where
+module Container.LosslessImage.ImageContainer (ImageContainer(..), MutableImageContainer(..), Pixel, getPixels) where
 
 import Data.BitString as BS
 import safe Control.Monad.ST (ST)
@@ -23,17 +23,15 @@ getPixels x y colorsCount = do
 
 -- Image Containers
 
-class ImageContainer img thawed | img -> thawed, thawed -> img where
-  -- Immutable
+class ImageContainer img where
   getBounds :: img -> (Word32, Word32, Word8)
-  getBoundsM :: thawed s -> ST s (Word32, Word32, Word8)
   getPixelLsb :: img -> (Word32, Word32, Word8) -> Bool
   getPixel :: img -> (Word32, Word32, Word8) -> Word32
   withThawedImage :: img -> (forall p. WritableSteganographyContainer thawed p => thawed s -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
   unsafeWithThawedImage :: img -> (forall p. WritableSteganographyContainer thawed p => thawed s -> RndST s (Either String ())) -> RndST s (Either String LBS.ByteString)
-  -- Mutbale
-  setPixelLsb :: thawed s -> (Word32, Word32, Word8) -> Bool -> ST s ()
-  freezeImage :: thawed s -> ST s (img)
-
   -- Defaults
   unsafeWithThawedImage = withThawedImage
+
+class MutableImageContainer img where
+  setPixelLsb :: img s -> (Word32, Word32, Word8) -> Bool -> ST s ()
+  getBoundsM :: img s -> ST s (Word32, Word32, Word8)

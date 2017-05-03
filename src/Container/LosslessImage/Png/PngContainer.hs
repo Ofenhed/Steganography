@@ -8,6 +8,7 @@ module Container.LosslessImage.Png.PngContainer (PngImage(..), PngImageType(..))
 
 import Codec.Picture.Png (decodePngWithMetadata, encodePngWithMetadata)
 import Codec.Picture.Png (PngSavable)
+import Codec.Picture.Metadata (Metadatas)
 import Codec.Picture.Types (thawImage, unsafeThawImage, unsafeFreezeImage, freezeImage)
 import Control.Monad.ST (ST)
 import Control.Monad.Trans.Class (lift)
@@ -15,52 +16,36 @@ import Crypto.RandomMonad (randomElementsLength, RandomElementsListST(), RndST)
 import Data.Array.ST (STArray())
 import Data.Bits (Bits)
 import Data.Word (Word32, Word8)
-import Container.LosslessImage.ImageContainer (Pixel, getPixels)
+import Container.LosslessImage.ImageContainer (Pixel, getPixels, ImageContainer(..), MutableImageContainer(..))
+import Container.LosslessImage.ImageHandler (PixelInfo)
 import SteganographyContainer (SteganographyContainer(..), WritableSteganographyContainer(..), SteganographyContainerOptions(..))
+import Container.LosslessImage.ImageHandler (createCryptoState)
+import Container.LosslessImage.ImageBindings (WithPixelInfoType(..))
 
 import qualified Codec.Picture.Types as PT
 import qualified Data.BitString as BiS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy as LBS
-import qualified Container.LosslessImage.Png.ImageFileHandler as A
-
-data WritablePngImage pixel s = (PT.Pixel pixel, PngSavable pixel, Bits (PT.PixelBaseComponent pixel)) => WritablePngImage (PT.MutableImage s pixel) (A.PixelInfo s)
-
-instance WritableSteganographyContainer (WritablePngImage a) [A.CryptoPrimitive] where
-  getPrimitives (WritablePngImage image info) = A.getCryptoPrimitives info
-  writeBitsP (WritablePngImage image info) prim bits = lift $ A.writeBits_ prim info image bits
 
 -- Slow PNG Handling
-data PngImage s = PngImage PT.DynamicImage (A.PixelInfo s)
+data PngImage = PngImage PT.DynamicImage Metadatas
+data MutablePngImage a s = MutablePngImage (PT.MutableImage a s)
 data PngImageType = PngImageSpawner
                   | PngImageSpawnerFast
+data WritablePngImage pixel s = (PT.Pixel pixel, PngSavable pixel, Bits (PT.PixelBaseComponent pixel)) => WritablePngImage (PT.MutableImage s pixel)
 
-instance SteganographyContainerOptions PngImageType PngImage where
+
+instance SteganographyContainerOptions PngImageType (WithPixelInfoType PngImage) where
   createContainer options imagedata = case decodePngWithMetadata (LBS.toStrict imagedata) of
-                                Right (dynamicImage, metadata) -> A.createCryptoState (case options of PngImageSpawnerFast -> True ; PngImageSpawner -> False) dynamicImage >>= \(element, otherthing) -> return $ Right $ PngImage dynamicImage (element, otherthing, metadata)
+                                Right (dynamicImage, metadata) -> createCryptoState (case options of PngImageSpawnerFast -> True ; PngImageSpawner -> False) (PngImage dynamicImage metadata) >>= \info -> return $ Right $ WithPixelInfoType (PngImage dynamicImage metadata) info
                                 Left _ -> return $ Left "Could not decode"
 
-instance SteganographyContainer (PngImage) where
-  readSalt (PngImage i info) count = A.readSalt info i count
-  readBits (PngImage i info) count = A.readBits info i (fromIntegral count)
+instance ImageContainer (PngImage) where
+  getBounds img = error "Not implemented"
+  getPixelLsb img (x, y, c) = error "Not implemented"
+  getPixel img (x, y, c) = error "Not implemnted"
+  withThawedImage img func = error "Not implemented"
 
-  bitsAvailable (PngImage i (elements, _, _)) = randomElementsLength elements >>= return . fromIntegral
-
-  unsafeWithSteganographyContainer (PngImage image info@(_, _, metadata)) func = A.pngDynamicMap (\img -> do
-      thawed <- unsafeThawImage img
-      result <- func $ WritablePngImage thawed info
-      case result of
-        Left err -> return $ Left err
-        Right _ -> do
-          frozen <- unsafeFreezeImage thawed
-          return $ Right $ encodePngWithMetadata metadata frozen) image
-
-  withSteganographyContainer (PngImage image info@(_, _, metadata)) func = A.pngDynamicMap (\img -> do
-      thawed <- thawImage img
-      result <- func $ WritablePngImage thawed info
-      case result of
-        Left err -> return $ Left err
-        Right _ -> do
-          frozen <- freezeImage thawed
-          return $ Right $ encodePngWithMetadata metadata frozen) image
-
+instance MutableImageContainer (WritablePngImage px) where
+  getBoundsM img = error "Not implemented"
+  setPixelLsb img (x, y, c) b = error "Not implemented"
