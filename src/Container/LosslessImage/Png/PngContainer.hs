@@ -29,8 +29,6 @@ import qualified Data.BitString as BiS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy as LBS
 
-import Debug.Trace (traceShowM)
-
 -- Slow PNG Handling
 data PngImage = PngImage PT.DynamicImage Metadatas
 data PngImageType = PngImageSpawner
@@ -45,7 +43,7 @@ instance SteganographyContainerOptions PngImageType (WithPixelInfoType PngImage)
 
 instance ImageContainer (PngImage) where
   getBounds (PngImage img _) = (fromIntegral $ PT.dynamicMap PT.imageWidth img, fromIntegral $ PT.dynamicMap PT.imageHeight img, fromIntegral $ pngDynamicComponentCount img)
-  getPixelLsb (PngImage img _) (x, y, c) = case getColorAt img (fromIntegral x) (fromIntegral y) (fromIntegral c) .&. 1 of 1 -> True ; 0 -> False
+  getPixelLsb state coords = case (getPixel state coords) .&. 1 of 1 -> True ; 0 -> False
   getPixel (PngImage img _) (x, y, c) = fromIntegral $ getColorAt img (fromIntegral x) (fromIntegral y) (fromIntegral c)
   withThawedImage png@(PngImage image metadata) state func = pngDynamicMap (\img -> do
     thawed <- thawImage img
@@ -65,11 +63,9 @@ instance MutableImageContainer (MutablePngImage px) where
                if color == fromIntegral c
                   then value .&. (complement 1)
                   else value) originalPixel originalPixel
-         traceShowM ("r", (x, y, c), originalPixel /= changedPixel)
          return $ originalPixel /= changedPixel
 
   setPixelLsb (MutablePngImage _ img) (x, y, c) b = do
-         traceShowM ("w", (x, y, c), b)
          let (x', y') = (fromIntegral x, fromIntegral y)
          pixel <- PT.readPixel img x' y'
          let pixel' = PT.mixWith (\color value _ ->

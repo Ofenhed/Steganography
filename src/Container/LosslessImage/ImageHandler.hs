@@ -19,8 +19,6 @@ import Data.Word (Word32, Word8)
 import Data.Array.ST (STArray(), getBounds, writeArray, readArray, newArray)
 import Control.Monad (forM, when, zipWithM, zipWithM_)
 
-import Debug.Trace (traceShowM, traceShowId)
-
 data CryptoPrimitive = CryptoPrimitive (Container.Pixel) (Bool) deriving (Show)
 type CryptoStream = [CryptoPrimitive]
 
@@ -95,7 +93,7 @@ staticSeekPattern width height = staticSeekPattern' (1, 0)
                             (False, _, _, True) -> (x-1, y)
                             (False, _, _, False) -> (x+1, y)
   staticSeekPattern' prev = prev:(staticSeekPattern'' $ nextPixel prev)
-  staticSeekPattern'' (x, y) = if x > width && y > height then traceShowId [] else staticSeekPattern' (x, y)
+  staticSeekPattern'' (x, y) = if x > width && y > height then [] else staticSeekPattern' (x, y)
 
 
 generateSeekPattern :: Integer -> Integer -> Integer -> Integer -> [(Integer, Integer)]
@@ -123,31 +121,28 @@ writeBitsSafer :: MutableImageContainer img => PixelInfo s -> img s -> Word32 ->
 writeBitsSafer (_, Just usedPixels) image x y color newBit = do
   currentPixel <- getPixelLsbM image (x, y, color)
   (width, height, colors) <- getBoundsM image
+  usedPixelsBefore <- readArray usedPixels (fromIntegral x, fromIntegral y)
+  writeArray usedPixels (fromIntegral x, fromIntegral y) $ zipWith (\before index -> if index == color then True else before) usedPixelsBefore [0..]
   if currentPixel == newBit
     then return $ Right ()
     else do
       let isMatch before other = foldl (\match (color', (before', other')) -> if not match
                                                                         then False
                                                                         else if color == color'
-                                                                             then fromEitherE other' == newBit
+                                                                             then other' == Left newBit
                                                                              else fromEitherE before' == fromEitherE other' || (isLeft before' && isLeft other')) True $ zip [0..] $ zip before other
           rightLocked (x, y) = zipWithM (\index locked -> do
                        pixel <- getPixelLsbM image (x, y, index)
                        if locked
                          then return $ Right pixel
                          else return $ Left pixel) [0..]
-      usedPixelsBefore <- readArray usedPixels (fromIntegral x, fromIntegral y)
       lockedPixelsBefore <- rightLocked (x, y) usedPixelsBefore
 
       let seekPattern = map (\(x, y) -> (fromInteger x, fromInteger y)) $ generateSeekPattern (fromIntegral width) (fromIntegral height) (fromIntegral x) (fromIntegral y)
       match <- findM (\(x', y') -> do
             lockedPixels' <- readArray usedPixels (fromIntegral x', fromIntegral y')
             current <- rightLocked (x', y') lockedPixels'
-            traceShowM ((x, y), (x', y'))
-            traceShowM (lockedPixelsBefore, current, color, newBit)
-            traceShowM $ isMatch lockedPixelsBefore current
             return $ isMatch lockedPixelsBefore current) $ seekPattern
-      traceShowM ("Match: ",match,take 50 seekPattern)
       case match of
         Nothing -> error $ show (match, length seekPattern, width, height, x, y)
         Just (x', y') -> do
@@ -158,9 +153,6 @@ writeBitsSafer (_, Just usedPixels) image x y color newBit = do
                             setPixelLsb image (x', y', i) new
                             return before) index current
           zipWithM_ (\i new -> setPixelLsb image (x, y, i) new) index other
-          writeArray usedPixels (fromIntegral x, fromIntegral y) $ zipWith (\before index -> if index == color then True else before) usedPixelsBefore [0..]
-          usedPixelsAfter <- readArray usedPixels (fromIntegral x, fromIntegral y)
-          traceShowM (usedPixelsBefore, usedPixelsAfter)
           return $ Right ()
 
 
