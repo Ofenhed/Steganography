@@ -29,6 +29,8 @@ import qualified Data.BitString as BiS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy as LBS
 
+import Debug.Trace (traceShowM)
+
 -- Slow PNG Handling
 data PngImage = PngImage PT.DynamicImage Metadatas
 data PngImageType = PngImageSpawner
@@ -63,9 +65,11 @@ instance MutableImageContainer (MutablePngImage px) where
                if color == fromIntegral c
                   then value .&. (complement 1)
                   else value) originalPixel originalPixel
+         traceShowM ("r", (x, y, c), originalPixel /= changedPixel)
          return $ originalPixel /= changedPixel
 
   setPixelLsb (MutablePngImage _ img) (x, y, c) b = do
+         traceShowM ("w", (x, y, c), b)
          let (x', y') = (fromIntegral x, fromIntegral y)
          pixel <- PT.readPixel img x' y'
          let pixel' = PT.mixWith (\color value _ ->

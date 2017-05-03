@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module Container.LosslessImage.ImageHandler (CryptoPrimitive, CryptoStream, getCryptoPrimitives, readSalt, readBits_, writeBits_, PixelInfo, readBits, createCryptoState, ImageFileHandlerExceptions(..)) where
 
 import Container.LosslessImage.ImageContainer as Container
@@ -15,7 +17,9 @@ import qualified Data.BitString as BiS
 import qualified Data.ByteString.Lazy as ByS
 import Data.Word (Word32, Word8)
 import Data.Array.ST (STArray(), getBounds, writeArray, readArray, newArray)
-import Control.Monad (forM, when)
+import Control.Monad (forM, when, zipWithM, zipWithM_)
+
+import Debug.Trace (traceShowM)
 
 data CryptoPrimitive = CryptoPrimitive (Container.Pixel) (Bool) deriving (Show)
 type CryptoStream = [CryptoPrimitive]
@@ -94,12 +98,15 @@ staticSeekPattern width height = staticSeekPattern' (1, 0)
   staticSeekPattern'' (x, y) = if x > width && y > height then [] else staticSeekPattern' (x, y)
 
 
-generateSeekPattern width height x y = [(x' + x, y' + y) | (x', y') <- staticSeekPattern width height,
-                                                           x' + x >= 0 &&
-                                                           x' + x < width &&
-                                                           y' + y >= 0 &&
-                                                           y' + y < height]
-
+generateSeekPattern width height x y = [(x'', y'') | (x', y') <- staticSeekPattern width height,
+                                                           let x'' = x' + x; y'' = y' + y,
+                                                           x'' >= 0 &&
+                                                           x'' < width &&
+                                                           y'' >= 0 &&
+                                                           y'' < height]
+--("Match: ",Nothing,[(1578,1078),(1578,1079),(1577,1079),(1576,1079)])
+--Creating crypto context took 5.152052913s
+--Steganography-commandline: (Nothing,4,1920,1080,1577,1078)
 findM f [] = return Nothing
 findM f (x:xs) = do
   isTarget <- f x
@@ -107,16 +114,57 @@ findM f (x:xs) = do
      then return $ Just x
      else findM f xs
 
---writeBitsSafer (_, Just usedPixels) image x y color newBit = do
---  currentPixel <- getPixelLsbM image x y color
---  sourceSensitivity' <- readArray usedPixels (x, y)
---  let sourceSensitivity = zipWithM (\prev index -> if index == color
---                                                     then return $ True
---                                                     else return $ prev) sourceSensitivity' [0..]
---  if currentPixel == newBit
---    then return $ Right ()
---    else return $ Right ()
+fromEitherE :: Either a a -> a
+fromEitherE (Right a) = a
+fromEitherE (Left a) = a
 
+writeBitsSafer :: MutableImageContainer img => PixelInfo s -> img s -> Word32 -> Word32 -> Word8 -> Bool -> ST s (Either String ())
+writeBitsSafer (_, Just usedPixels) image x y color newBit = do
+  currentPixel <- getPixelLsbM image (x, y, color)
+  (width, height, colors) <- getBoundsM image
+  if currentPixel == newBit
+    then return $ Right ()
+    else do
+      let isMatch before other = foldl (\match (color', (before', other')) -> if not match
+                                                                        then False
+                                                                        else if color == color'
+                                                                             then fromEitherE other' == newBit
+                                                                             else fromEitherE before' == fromEitherE other' || (isLeft before' && isLeft other')) True $ zip [0..] $ zip before other
+          rightLocked (x, y) = zipWithM (\index locked -> do
+                       pixel <- getPixelLsbM image (x, y, index)
+                       if locked
+                         then return $ Right pixel
+                         else return $ Left pixel) [0..]
+      usedPixelsBefore <- readArray usedPixels (fromIntegral x, fromIntegral y)
+      lockedPixelsBefore <- rightLocked (x, y) usedPixelsBefore
+
+      let seekPattern = generateSeekPattern width height x y
+      match <- findM (\(x', y') -> do
+            lockedPixels' <- readArray usedPixels (fromIntegral x', fromIntegral y')
+            current <- rightLocked (x', y') lockedPixels'
+            traceShowM ((x, y), (x', y'))
+            traceShowM (lockedPixelsBefore, current, color, newBit)
+            traceShowM $ isMatch lockedPixelsBefore current
+            return $ isMatch lockedPixelsBefore current) $ seekPattern
+      traceShowM ("Match: ",match,take 50 seekPattern)
+      case match of
+        Nothing -> error $ show (match, length seekPattern, width, height, x, y)
+        Just (x', y') -> do
+          let index = [0..(fromIntegral colors-1)]
+          current <- mapM (\i -> getPixelLsbM image (x, y, i)) index
+          other <- zipWithM (\i new -> do
+                            before <- getPixelLsbM image (x', y', i)
+                            setPixelLsb image (x', y', i) new
+                            return before) index current
+          zipWithM_ (\i new -> setPixelLsb image (x, y, i) new) index other
+          writeArray usedPixels (fromIntegral x, fromIntegral y) $ zipWith (\before index -> if index == color then True else before) usedPixelsBefore [0..]
+          usedPixelsAfter <- readArray usedPixels (fromIntegral x, fromIntegral y)
+          traceShowM (usedPixelsBefore, usedPixelsAfter)
+          return $ Right ()
+
+
+
+writeBits_ :: MutableImageContainer img => CryptoStream -> PixelInfo s -> img s -> BiS.BitString -> ST s (Either String ())
 writeBits_ primitives pixels@(_, pixelStatus) image bits = if length primitives < (fromIntegral $ BiS.length bits)
                                              then return $ Left "Got more data that crypto primitives"
                                              else do
@@ -131,8 +179,7 @@ writeBits_ primitives pixels@(_, pixelStatus) image bits = if length primitives 
        then do
          setPixelLsb image (x, y, c) (xor inv bit)
          return $ Right ()
-       --else writeBitsSafer pixels image x y c newBit
-       else error "WriteBitsSafer currently not implemented"
+       else writeBitsSafer pixels image x y c (xor inv bit)
 
 readBits pixels image count = do
   primitives <- getCryptoPrimitives pixels count
