@@ -3,7 +3,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE RankNTypes #-}
 
-module Container.LosslessImage.ImageContainer (ImageContainer(..), MutableImageContainer(..), Pixel, getPixels, WithPixelInfoType(..), WithPixelInfoTypeM(..), PixelInfo(..)) where
+module Container.LosslessImage.ImageContainer (ImageContainer(..), MutableImageContainer(..), Pixel(..), getPixels, WithPixelInfoType(..), WithPixelInfoTypeM(..), PixelInfo(..)) where
 
 import Crypto.RandomMonad (RandomElementsListST())
 import Crypto.RandomMonad (RndST)
@@ -14,11 +14,12 @@ import SteganographyContainer (WritableSteganographyContainer(..))
 
 import qualified Data.ByteString.Lazy as LBS
 
-data WithPixelInfoType a s = WithPixelInfoType a (PixelInfo s)
-data WithPixelInfoTypeM a s = WithPixelInfoTypeM (a s) (PixelInfo s)
+type Pixel = (Word32, Word32, Word8)
+
 type PixelInfo s = (RandomElementsListST Pixel s, Maybe (STArray s (Int, Int) [Bool]))
 
-type Pixel = (Word32, Word32, Word8)
+data WithPixelInfoType a s = WithPixelInfoType a (PixelInfo s)
+data WithPixelInfoTypeM a s = WithPixelInfoTypeM (a s) (PixelInfo s)
 
 getPixels :: Word32 -> Word32 -> Word8 -> [Pixel]
 getPixels x y colorsCount = do
