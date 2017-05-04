@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Container.LosslessImage.ImageHandler (CryptoPrimitive, CryptoStream, getCryptoPrimitives, readSalt, readBits_, writeBits_, PixelInfo, readBits, createCryptoState, ImageFileHandlerExceptions(..)) where
+module Container.LosslessImage.ImageHandler (CryptoPrimitive, CryptoStream, getCryptoPrimitives, readSalt, readBits_, writeBits_, readBits, createCryptoState, ImageFileHandlerExceptions(..)) where
 
 import Container.LosslessImage.ImageContainer as Container
 import Crypto.RandomMonad (RandomElementsListST(), RndST, newRandomElementST, getRandomElement, getRandomM)
@@ -30,7 +30,7 @@ createCryptoState fastMode dynamicImage = do
   pixels'2 <- (newArray ((0, 0), (fromIntegral w - 1, fromIntegral h - 1)) $ map (\_ -> False) [1..fromIntegral colors] :: ST s (STArray s (Int, Int) [Bool]))
   return (pixels'1, if fastMode then Nothing else Just pixels'2)
 
-getCryptoPrimitives :: PixelInfo s -> Word -> RndST s CryptoStream
+getCryptoPrimitives :: Container.PixelInfo s -> Word -> RndST s CryptoStream
 getCryptoPrimitives (pixels,_) count = do
   read <- forM [1..count] $ \_ -> do
     pixel <- getRandomElement pixels
@@ -60,7 +60,7 @@ readBits_ primitives pixels image = BiS.fromList $ read primitives
 word32ToWord8List :: Word32 -> [Word8]
 word32ToWord8List w32 = map fromIntegral [shift w32 (-24), shift w32 (-16), shift w32 (-8), w32]
 
-readSalt :: ImageContainer const => PixelInfo s -> const -> Word -> RndST s ByS.ByteString
+readSalt :: ImageContainer const => Container.PixelInfo s -> const -> Word -> RndST s ByS.ByteString
 readSalt pixels@(_,pixelStatus) image count = read [0..count-1] >>= return . ByS.pack . concat
   where
   read = mapM $ \_ -> do
@@ -118,7 +118,7 @@ fromEitherE :: Either a a -> a
 fromEitherE (Right a) = a
 fromEitherE (Left a) = a
 
-writeBitsSafer :: MutableImageContainer img => PixelInfo s -> img s -> Word32 -> Word32 -> Word8 -> Bool -> ST s (Either String ())
+writeBitsSafer :: MutableImageContainer img => Container.PixelInfo s -> img s -> Word32 -> Word32 -> Word8 -> Bool -> ST s (Either String ())
 writeBitsSafer (_, Just usedPixels) image x y color newBit = do
   currentPixel <- getPixelLsbM image (x, y, color)
   (width, height, colors) <- getBoundsM image
@@ -158,7 +158,7 @@ writeBitsSafer (_, Just usedPixels) image x y color newBit = do
 
 
 
-writeBits_ :: MutableImageContainer img => CryptoStream -> PixelInfo s -> img s -> BiS.BitString -> ST s (Either String ())
+writeBits_ :: MutableImageContainer img => CryptoStream -> Container.PixelInfo s -> img s -> BiS.BitString -> ST s (Either String ())
 writeBits_ primitives pixels@(_, pixelStatus) image bits = if length primitives < (fromIntegral $ BiS.length bits)
                                              then return $ Left "Got more data that crypto primitives"
                                              else do
