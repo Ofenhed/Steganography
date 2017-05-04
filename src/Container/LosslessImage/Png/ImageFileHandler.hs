@@ -4,25 +4,12 @@
 module Container.LosslessImage.Png.ImageFileHandler (getColorAt, pngDynamicMap, pngDynamicComponentCount) where
 
 import Codec.Picture.Png (PngSavable)
-import Codec.Picture.Metadata (Metadatas)
-import Control.Exception (throw, Exception)
-import Control.Monad (forM, forM_, when)
-import Control.Monad.ST (ST())
-import Control.Monad.Trans.Class (lift)
-import Crypto.RandomMonad (getRandomElement, RndST, getRandomM, randomElementsLength, RandomElementsListST(), newRandomElementST)
-import Data.Array.ST (STArray(), getBounds, writeArray, readArray, newArray)
-import Data.Either (isLeft)
-import Data.Bits (Bits, xor, shift, (.&.), complement, (.|.))
-import Data.Maybe (isNothing, isJust, fromJust)
-import Data.Typeable (Typeable)
-import Data.Word (Word8)
-import Container.LosslessImage.ImageContainer (Pixel, getPixels)
+import Container.LosslessImage.ImageContainer (Pixel)
 import Container.LosslessImage.ImageHandler (ImageFileHandlerExceptions(UnsupportedFormatException))
-import Data.List (find)
+import Control.Exception (throw)
+import Data.Bits (Bits)
 
 import qualified Codec.Picture.Types as I
-import qualified Data.BitString as BS
-import qualified Data.ByteString.Lazy as ByS
 
 getColorAt :: I.DynamicImage -> Int -> Int -> Int -> I.Pixel16
 getColorAt (I.ImageY8 i) x y c = let g = I.pixelAt i x y in fromIntegral $ [g] !! c

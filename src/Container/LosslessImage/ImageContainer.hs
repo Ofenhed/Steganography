@@ -5,14 +5,14 @@
 
 module Container.LosslessImage.ImageContainer (ImageContainer(..), MutableImageContainer(..), Pixel, getPixels, WithPixelInfoType(..), WithPixelInfoTypeM(..), PixelInfo(..)) where
 
-import Data.BitString as BS
+import Crypto.RandomMonad (RandomElementsListST())
+import Crypto.RandomMonad (RndST)
+import Data.Array.ST (STArray)
 import safe Control.Monad.ST (ST)
 import safe Data.Word (Word32, Word8)
-import Data.ByteString.Lazy as LBS
-import Crypto.RandomMonad (RandomElementsListST())
-import Data.Array.ST (STArray)
-import Crypto.RandomMonad (RndST)
 import SteganographyContainer (WritableSteganographyContainer(..))
+
+import qualified Data.ByteString.Lazy as LBS
 
 data WithPixelInfoType a s = WithPixelInfoType a (PixelInfo s)
 data WithPixelInfoTypeM a s = WithPixelInfoTypeM (a s) (PixelInfo s)

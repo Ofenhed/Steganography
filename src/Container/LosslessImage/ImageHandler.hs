@@ -5,19 +5,20 @@ module Container.LosslessImage.ImageHandler (CryptoPrimitive, CryptoStream, getC
 import Container.LosslessImage.ImageContainer as Container
 import Crypto.RandomMonad (RandomElementsListST(), RndST, newRandomElementST, getRandomElement, getRandomM)
 
-import Control.Exception (throw, Exception)
-import Control.Monad.Trans.Class (lift)
+import Control.Exception (Exception)
+import Control.Monad (forM, when, zipWithM, zipWithM_)
 import Control.Monad.ST (ST)
+import Control.Monad.Trans.Class (lift)
+import Data.Array.ST (STArray(), getBounds, writeArray, readArray, newArray)
+import Data.Bits (xor, shift, (.&.), complement, (.|.))
+import Data.Either (isLeft)
 import Data.List (find)
 import Data.Maybe (isNothing, isJust, fromJust)
-import Data.Either (isLeft)
 import Data.Typeable (Typeable)
-import Data.Bits (Bits, xor, shift, (.&.), complement, (.|.))
+import Data.Word (Word32, Word8)
+
 import qualified Data.BitString as BiS
 import qualified Data.ByteString.Lazy as ByS
-import Data.Word (Word32, Word8)
-import Data.Array.ST (STArray(), getBounds, writeArray, readArray, newArray)
-import Control.Monad (forM, when, zipWithM, zipWithM_)
 
 data CryptoPrimitive = CryptoPrimitive (Container.Pixel) (Bool) deriving (Show)
 type CryptoStream = [CryptoPrimitive]

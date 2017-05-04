@@ -6,27 +6,20 @@
 {-# LANGUAGE RankNTypes #-}
 module Container.LosslessImage.Png.PngContainer (PngImage(..), PngImageType(..)) where
 
+import Codec.Picture.Metadata (Metadatas)
 import Codec.Picture.Png (decodePngWithMetadata, encodePngWithMetadata)
 import Codec.Picture.Png (PngSavable)
-import Codec.Picture.Metadata (Metadatas)
-import Codec.Picture.Types (thawImage, unsafeThawImage, unsafeFreezeImage, freezeImage)
-import Control.Monad.ST (ST)
-import Control.Monad.Trans.Class (lift)
-import Crypto.RandomMonad (randomElementsLength, RandomElementsListST(), RndST)
-import Data.Array.ST (STArray())
-import Data.Bits (Bits, (.&.), complement, (.|.))
-import Data.Word (Word32, Word8)
-import Container.LosslessImage.ImageContainer (Pixel, getPixels, ImageContainer(..), MutableImageContainer(..))
-import Container.LosslessImage.ImageHandler (PixelInfo)
-import SteganographyContainer (SteganographyContainer(..), WritableSteganographyContainer(..), SteganographyContainerOptions(..))
+import Codec.Picture.Types (thawImage, freezeImage)
+import Container.LosslessImage.ImageBindings ()
+import Container.LosslessImage.ImageContainer (Pixel, ImageContainer(..), MutableImageContainer(..))
+import Container.LosslessImage.ImageContainer (WithPixelInfoType(..), WithPixelInfoTypeM(..))
 import Container.LosslessImage.ImageHandler (createCryptoState)
 import Container.LosslessImage.Png.ImageFileHandler (getColorAt, pngDynamicMap, pngDynamicComponentCount)
-import Container.LosslessImage.ImageContainer (WithPixelInfoType(..), WithPixelInfoTypeM(..))
-import Container.LosslessImage.ImageBindings ()
+import Data.Bits (Bits, (.&.), complement, (.|.))
+import Data.Word (Word32, Word8)
+import SteganographyContainer (SteganographyContainerOptions(..))
 
 import qualified Codec.Picture.Types as PT
-import qualified Data.BitString as BiS
-import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy as LBS
 
 -- Slow PNG Handling
