@@ -107,11 +107,17 @@ generateSeekPattern width height x y = [(x'', y'') | (x', y') <- staticSeekPatte
 --("Match: ",Nothing,[(1578,1078),(1578,1079),(1577,1079),(1576,1079)])
 --Creating crypto context took 5.152052913s
 --Steganography-commandline: (Nothing,4,1920,1080,1577,1078)
-findM f [] = return Nothing
-findM f (x:xs) = do
+indexOfM f [] = return Nothing
+indexOfM f (x:xs) = do
   isTarget <- f x
   if isTarget
      then return $ Just x
+     else indexOfM f xs
+findM f [] = return Nothing
+findM f (x:xs) = do
+  target <- f x
+  if isJust $ target
+     then return $ target
      else findM f xs
 
 fromEitherE :: Either a a -> a
@@ -143,20 +149,18 @@ writeBitsSafer (_, Just usedPixels) image x y color newBit = do
       match <- findM (\(x', y') -> do
             lockedPixels' <- readArray usedPixels (fromIntegral x', fromIntegral y')
             if lockedPixels' !! fromIntegral color
-               then return False
+               then return Nothing
                else do
                  current <- rightLocked (x', y') lockedPixels'
-                 return $ isMatch lockedPixelsBefore current) $ seekPattern
+                 return $ if isMatch lockedPixelsBefore current
+                             then Just ((x', y'), current)
+                             else Nothing) seekPattern
       case match of
         Nothing -> error $ show (match, length seekPattern, width, height, x, y)
-        Just (x', y') -> do
+        Just ((x', y'), target) -> do
           let index = [0..(fromIntegral colors-1)]
-          current <- mapM (\i -> getPixelLsbM image (x, y, i)) index
-          other <- zipWithM (\i new -> do
-                            before <- getPixelLsbM image (x', y', i)
-                            setPixelLsb image (x', y', i) new
-                            return before) index current
-          zipWithM_ (\i new -> setPixelLsb image (x, y, i) new) index other
+          zipWithM_ (\i new -> setPixelLsb image (x', y', i) $ fromEitherE new) index lockedPixelsBefore
+          zipWithM_ (\i new -> setPixelLsb image (x, y, i) $ fromEitherE new) index target
           return $ Right ()
 
 
