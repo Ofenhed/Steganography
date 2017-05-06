@@ -142,8 +142,11 @@ writeBitsSafer (_, Just usedPixels) image x y color newBit = do
       let seekPattern = map (\(x, y) -> (fromInteger x, fromInteger y)) $ generateSeekPattern (fromIntegral width) (fromIntegral height) (fromIntegral x) (fromIntegral y)
       match <- findM (\(x', y') -> do
             lockedPixels' <- readArray usedPixels (fromIntegral x', fromIntegral y')
-            current <- rightLocked (x', y') lockedPixels'
-            return $ isMatch lockedPixelsBefore current) $ seekPattern
+            if lockedPixels' !! fromIntegral color
+               then return False
+               else do
+                 current <- rightLocked (x', y') lockedPixels'
+                 return $ isMatch lockedPixelsBefore current) $ seekPattern
       case match of
         Nothing -> error $ show (match, length seekPattern, width, height, x, y)
         Just (x', y') -> do
