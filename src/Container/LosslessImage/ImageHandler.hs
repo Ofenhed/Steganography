@@ -59,20 +59,20 @@ readBits_ primitives pixels image = BiS.fromList $ read primitives
       in xor inv $ getPixelLsb image (x, y, c)
 
 word32ToWord8List :: Word32 -> [Word8]
-word32ToWord8List w32 = map fromIntegral [shift w32 (-24), shift w32 (-16), shift w32 (-8), w32]
+word32ToWord8List w32 = let candidate = filter ((/=) 0) $ map fromIntegral [shift w32 (-24), shift w32 (-16), shift w32 (-8), w32]
+                          in if candidate == []
+                                then [0]
+                                else candidate
 
 readSalt :: ImageContainer const => Container.PixelInfo s -> const -> Word -> RndST s ByS.ByteString
 readSalt pixels@(_,pixelStatus) image count = read [0..count-1] >>= return . ByS.pack . concat
   where
   read = mapM $ \_ -> do
-    [CryptoPrimitive (x, y, c) inv] <- getCryptoPrimitives pixels 1
+    [CryptoPrimitive (x, y, c) lastBit] <- getCryptoPrimitives pixels 1
     let result = getPixel image (x, y, c)
-        result' = if inv
-                      then complement result
-                      else result
-    lift $ when (isJust pixelStatus) $ do
-      prev <- readArray (fromJust pixelStatus) (fromIntegral x, fromIntegral y)
-      writeArray (fromJust pixelStatus) (fromIntegral x, fromIntegral y) $ zipWith (\before index -> if index == c then True else before) prev [0..]
+        result' = if lastBit
+                      then result .|. 1
+                      else result .&. complement 1
     -- This will throw away bits until a number between 0 and result'' is
     -- found. This means that this function will not only return a salt,
     -- but also salt the current crypto stream by throwing away a random
