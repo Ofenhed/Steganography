@@ -28,7 +28,7 @@ Executable Steganography-commandline
                      bytestring,
                      console-program,
                      cryptonite,
-                     deepseq,
+                     deepseq >= 1.2.0.0,
                      JuicyPixels,
                      Lazy-Pbkdf2 >= 2.1.0,
                      memory,
