@@ -155,7 +155,7 @@ writeBitsSafer (_, Just usedPixels) image x y color newBit = do
                  return $ if isMatch lockedPixelsBefore current
                              then Just ((x', y'), current)
                              else Nothing) seekPattern
-      case match of
+      case seq lockedPixelsBefore match of
         Nothing -> error $ show (match, length seekPattern, width, height, x, y)
         Just ((x', y'), target) -> do
           let index = [0..(fromIntegral colors-1)]
