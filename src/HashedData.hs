@@ -1,7 +1,7 @@
 module HashedData (writeAndHash, readUntilHash) where
 
 import Control.Monad.ST (ST)
-import Crypto.Hash (SHA1(..), SHA3_512, SHA512, Skein512_512, Blake2b_512, hashDigestSize, digestFromByteString, HashAlgorithm)
+import Crypto.Hash (SHA1(..), SHA3_512(..), SHA512(..), Skein512_512(..), Blake2b_512(..), hashDigestSize, digestFromByteString, HashAlgorithm, hashBlockSize)
 import Crypto.MAC.HMAC (Context, update, initialize, finalize, hmacGetDigest)
 import Crypto.RandomMonad (getRandomByteStringM, RndST)
 import Data.Bits (xor)
@@ -15,10 +15,10 @@ data SignatureHash = SignatureHash (Context SHA3_512) (Context SHA512) (Context 
 
 createBigSignatureHash :: RndST s SignatureHash
 createBigSignatureHash = do
-  salt1 <- getRandomByteStringM 4096
-  salt2 <- getRandomByteStringM 4096
-  salt3 <- getRandomByteStringM 4096
-  salt4 <- getRandomByteStringM 4096
+  salt1 <- getRandomByteStringM $ fromIntegral $ hashBlockSize SHA3_512
+  salt2 <- getRandomByteStringM $ fromIntegral $ hashBlockSize SHA512
+  salt3 <- getRandomByteStringM $ fromIntegral $ hashBlockSize Skein512_512
+  salt4 <- getRandomByteStringM $ fromIntegral $ hashBlockSize Blake2b_512
 
   return $ SignatureHash (initialize (LBS.toStrict salt1))
                          (initialize (LBS.toStrict salt2))
