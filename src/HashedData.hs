@@ -42,8 +42,9 @@ signatureFinalize (SignatureHash s1 s2 s3 s4) = hash
 
 writeAndHash :: WritableSteganographyContainer a p => a s -> LBS.ByteString -> RndST s (Either String [Word8])
 writeAndHash writer input = do
-  let blockSize = hashDigestSize SHA1
-  hashPosition <- getPrimitives writer (fromIntegral $ 8 * blockSize)
+  let blockSize = hashBlockSize SHA1
+  let digestSize = hashDigestSize SHA1
+  hashPosition <- getPrimitives writer (fromIntegral $ 8 * digestSize)
   hashSalt <- getRandomByteStringM $ fromIntegral blockSize
 
   bigHashes <- createBigSignatureHash
@@ -75,8 +76,9 @@ writeAndHash writer input = do
         Right () -> return $ Right h2
 
 readUntilHash reader = do
-  let blockSize = hashDigestSize SHA1
-  hash <- readBytes reader $ fromIntegral blockSize
+  let blockSize = hashBlockSize SHA1
+  let digestSize = hashDigestSize SHA1
+  hash <- readBytes reader $ fromIntegral digestSize
   hashSalt <- getRandomByteStringM $ fromIntegral blockSize
   bigHashes <- createBigSignatureHash
 
