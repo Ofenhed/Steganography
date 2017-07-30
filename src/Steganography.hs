@@ -19,7 +19,7 @@ import Pbkdf2 (hmacSha512Pbkdf2)
 import Container.LosslessImage.Png.PngContainer (PngImage, PngImageType)
 import SteganographyContainer (createContainer, withSteganographyContainer, SteganographyContainerOptions, storageAvailableBytes)
 
-import qualified Data.BitString as BS
+import qualified Data.BitString as BiS
 import qualified Data.ByteArray as BA
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
@@ -49,10 +49,10 @@ doEncrypt imageFile containerType secretFile loops inputData salt pkiFile signFi
         case container of
           Left err -> return $ Left $ "Could not read image file"
           Right container' -> do
-            (result, _) <- runRndT (RndStateListParallel [(BS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)]) $ do
+            (result, _) <- runRndT (RndStateListParallel [(BiS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)]) $ do
               do -- Seperate context for IO operations
                 timeBefore <- lift $ unsafeIOToST getCurrentTime
-                createRandomStates container' salt (fromIntegral $ LBS.length secretFile)
+                createRandomStates container' salt (fromIntegral $ BS.length secretFile)
                 timeAfter <- lift $ unsafeIOToST getCurrentTime
                 let duration = diffUTCTime timeAfter timeBefore
                 lift $ unsafeIOToST $ putStrLn $ "Creating crypto context took " ++ (show $ duration)
@@ -84,8 +84,8 @@ doDecrypt imageFile containerType secretFile loops salt pkiFile signFile = do
         case container of
           Left err -> error "" -- TODO: Make sure this compiles with Left
           Right reader -> do
-            (result, _) <- runRndT (RndStateListParallel [(BS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)]) $ do
-              createRandomStates reader salt $ fromIntegral $ LBS.length secretFile
+            (result, _) <- runRndT (RndStateListParallel [(BiS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)]) $ do
+              createRandomStates reader salt $ fromIntegral $ BS.length secretFile
               addAdditionalPrivatePkiState privateKey reader
               hiddenData <- readUntilHash reader
               case hiddenData of

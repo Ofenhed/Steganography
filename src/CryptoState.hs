@@ -90,7 +90,7 @@ addAdditionalPrivatePkiState (Just (PrivatePkiRsa key)) reader = do
   encrypted <- readBytes reader $ fromIntegral $ private_size key
   let Right decrypted = OAEP.decrypt Nothing oaepParams key (LBS.toStrict encrypted)
   salt <- getRandomByteStringM 256
-  addSeedM [(BiS.bitStringLazy $ hmacSha512Pbkdf2 (C8.fromStrict decrypted) salt 5)]
+  addSeedM [(BiS.bitStringLazy $ hmacSha512Pbkdf2 decrypted (LBS.toStrict salt) 5)]
 
 addAdditionalPrivatePkiState (Just (PrivatePkiEcc key)) reader = do
   encryptedKey <- readBytes reader $ 32 -- ECC key size
@@ -111,7 +111,7 @@ addAdditionalPublicPkiState (Just (PublicPkiRsa (seed, secret, key))) writer = d
            Left err -> return $ Left err
            Right _ -> do
              salt <- getRandomByteStringM 256
-             addSeedM [BiS.bitStringLazy $ hmacSha512Pbkdf2 (LBS.pack secret) salt 5]
+             addSeedM [BiS.bitStringLazy $ hmacSha512Pbkdf2 (BS.pack secret) (LBS.toStrict salt) 5]
              return $ Right ()
 
 addAdditionalPublicPkiState (Just (PublicPkiEcc temporaryKey publicKey)) writer = do
@@ -175,7 +175,7 @@ createRandomStates reader salt minimumEntropyBytes = do
   extraSalt <- getRandomByteStringM $ max 0 $ minimumEntropyBytes - (fromIntegral $ quot saltLength 8)
   newPbkdfSecret <- getRandomByteStringM 256
   aesSecret1 <- getRandomByteStringM 32
-  replaceSeedM [BiS.bitStringLazy $ hmacSha512Pbkdf2 newPbkdfSecret (LBS.concat [bigSalt, salt, extraSalt]) 5]
+  replaceSeedM [BiS.bitStringLazy $ hmacSha512Pbkdf2 (LBS.toStrict newPbkdfSecret) (BS.concat [LBS.toStrict bigSalt, salt, LBS.toStrict extraSalt]) 5]
   aesSecret2 <- getRandomByteStringM 32
   addSeedM $ createAes256RngState $ LBS.toStrict aesSecret1
   addSeedM $ createAes256RngState $ LBS.toStrict aesSecret2

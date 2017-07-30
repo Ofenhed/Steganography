@@ -9,8 +9,8 @@ import Data.Maybe (isJust, fromJust)
 import System.Console.Command (Commands,Tree(Node),Command,command,withOption,withNonOption,io)
 import System.Console.Program (single,showUsage)
 
-import qualified Data.ByteString.Lazy.Char8 as C8
-import qualified Data.ByteString.Char8 as LC8
+import qualified Data.ByteString.Lazy.Char8 as LC8
+import qualified Data.ByteString.Char8 as C8
 import qualified System.Console.Argument as Argument
 
 myCommands :: Commands IO
@@ -31,36 +31,36 @@ readOrEmpty [] = return C8.empty
 readOrEmpty filename = C8.readFile filename
 
 doDryEncrypt' imageFile secretFile loops inputFile salt pkiFile signFile = do
-  imageData <- readOrEmpty imageFile
+  imageData <- lazyReadOrEmpty imageFile
   secretData <- readOrEmpty secretFile
-  inputData <- readOrEmpty inputFile
-  pkiData <- readOrEmpty pkiFile
-  signData <- lazyReadOrEmpty signFile
+  inputData <- lazyReadOrEmpty inputFile
+  pkiData <- lazyReadOrEmpty pkiFile
+  signData <- readOrEmpty signFile
   encrypted <- doEncrypt imageData DummyContainer secretData loops inputData salt pkiData signData
   case encrypted of
     Left err -> putStrLn $ "Error: " ++ err
-    Right encrypted' -> putStrLn $ "Result: " ++ (C8.unpack encrypted')
+    Right encrypted' -> putStrLn $ "Result: " ++ (LC8.unpack encrypted')
 
 doEncrypt' imageFile secretFile loops inputFile salt pkiFile signFile fastMode = do
-  imageData <- readOrEmpty imageFile
+  imageData <- lazyReadOrEmpty imageFile
   secretData <- readOrEmpty secretFile
-  inputData <- readOrEmpty inputFile
-  pkiData <- readOrEmpty pkiFile
-  signData <- lazyReadOrEmpty signFile
+  inputData <- lazyReadOrEmpty inputFile
+  pkiData <- lazyReadOrEmpty pkiFile
+  signData <- readOrEmpty signFile
   encrypted <- doEncrypt imageData (if fastMode then PngImageSpawnerFast else PngImageSpawner) secretData loops inputData salt pkiData signData
   case encrypted of
     Left err -> error err
-    Right encrypted' -> C8.writeFile imageFile encrypted'
+    Right encrypted' -> LC8.writeFile imageFile encrypted'
 
 doDecrypt' imageFile secretFile loops output salt pkiFile signFile = do
-  imageData <- readOrEmpty imageFile
+  imageData <- lazyReadOrEmpty imageFile
   secretData <- readOrEmpty secretFile
-  pkiData <- lazyReadOrEmpty pkiFile
-  signData <- readOrEmpty signFile
+  pkiData <- readOrEmpty pkiFile
+  signData <- lazyReadOrEmpty signFile
   decrypted <- doDecrypt imageData PngImageSpawner secretData loops salt pkiData signData
   case decrypted of
     Left err -> error err
-    Right decrypted' -> C8.writeFile output decrypted'
+    Right decrypted' -> LC8.writeFile output decrypted'
 
 encrypt,decrypt,help,dummyEncrypt :: Command IO
 dummyEncrypt = command "dummy" "Do a dry run encryption which outputs exactly what would have been written to the Steganography container. Options are the same as for 'encrypt', except the image file will not be modified and fast mode is no longer an option." $
