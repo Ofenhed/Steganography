@@ -89,12 +89,13 @@ staticSeekPattern = do
 
 generateSeekPattern :: Integer -> Integer -> Integer -> Integer -> [(Integer, Integer)]
 generateSeekPattern width height = let pattern = staticSeekPattern
-                                    in \x y -> [(x'', y'') | (x', y') <- pattern,
-                                                             let x'' = x' + x; y'' = y' + y,
-                                                             x'' >= 0 &&
-                                                             x'' < width &&
-                                                             y'' >= 0 &&
-                                                             y'' < height]
+                                    in \x y -> take (fromInteger $ width*height-1)
+                                                    [(x'', y'') | (x', y') <- pattern,
+                                                                  let x'' = x' + x; y'' = y' + y,
+                                                                  x'' >= 0 &&
+                                                                  x'' < width &&
+                                                                  y'' >= 0 &&
+                                                                  y'' < height]
 
 --("Match: ",Nothing,[(1578,1078),(1578,1079),(1577,1079),(1576,1079)])
 --Creating crypto context took 5.152052913s
