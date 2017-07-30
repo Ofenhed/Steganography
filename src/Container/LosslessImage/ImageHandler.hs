@@ -74,37 +74,28 @@ readSalt pixels@(_,pixelStatus) image count = read [0..count-1] >>= return . ByS
                       then result .|. 1
                       else result .&. complement 1
     -- This will throw away bits until a number between 0 and result'' is
-    -- found. This means that this function will not only return a salt,
-    -- but also salt the current crypto stream by throwing away a random
-    -- number a of bits.
+    -- found.
     _ <- getRandomM $ fromIntegral result'
     return $ word32ToWord8List result'
 
-staticSeekPattern :: Integer -> Integer -> [(Integer, Integer)]
-staticSeekPattern width height = staticSeekPattern' (1, 0)
-  where
-  nextPixel (x, y) = let xBigger = abs x > abs y
-                         diagonal = abs x == abs y
-                         xPos = x > 0
-                         yPos = y > 0
-                       in case (xBigger, diagonal, xPos, yPos)
-                          of
-                            (True, _, True, _) -> (x, y+1)
-                            (True, _, False, _) -> (x, y-1)
-                            (False, True, False, True) -> (x, y-1)
-                            (False, _, _, True) -> (x-1, y)
-                            (False, _, _, False) -> (x+1, y)
-  staticSeekPattern' prev = prev:(staticSeekPattern'' $ nextPixel prev)
-  staticSeekPattern'' (x, y) = if x > width && y > height then [] else staticSeekPattern' (x, y)
-
+staticSeekPattern = do
+  dist <- [1..]
+  let sides = [(x, y) | x <- [-dist, dist],
+                        y <- [-(dist-1)..(dist-1)]]
+      other = [(x, y) | y <- [-dist, dist],
+                        x <- [-dist..dist]]
+  pixel <- sides ++ other
+  return pixel
 
 generateSeekPattern :: Integer -> Integer -> Integer -> Integer -> [(Integer, Integer)]
-generateSeekPattern width height x y = [(x'', y'') | (x', y') <- staticSeekPattern width height,
-                                                           let x'' = x' + x; y'' = y' + y,
-                                                           x'' >= 0 &&
-                                                           x'' < width &&
-                                                           y'' >= 0 &&
-                                                           y'' < height]
+generateSeekPattern width height = let pattern = staticSeekPattern
+                                    in \x y -> [(x'', y'') | (x', y') <- pattern,
+                                                             let x'' = x' + x; y'' = y' + y,
+                                                             x'' >= 0 &&
+                                                             x'' < width &&
+                                                             y'' >= 0 &&
+                                                             y'' < height]
+
 --("Match: ",Nothing,[(1578,1078),(1578,1079),(1577,1079),(1576,1079)])
 --Creating crypto context took 5.152052913s
 --Steganography-commandline: (Nothing,4,1920,1080,1577,1078)
