@@ -9,6 +9,7 @@ import Data.Word (Word8)
 import SteganographyContainer (readBytes, writeBytes, writeBytesP, getPrimitives, bytesAvailable, WritableSteganographyContainer(..))
 
 import qualified Data.ByteArray as BA
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 
 data SignatureHash = SignatureHash (Context SHA3_512) (Context SHA512) (Context Skein512_512) (Context Blake2b_512)
@@ -20,10 +21,10 @@ createBigSignatureHash = do
   salt3 <- getRandomByteStringM $ fromIntegral $ hashBlockSize Skein512_512
   salt4 <- getRandomByteStringM $ fromIntegral $ hashBlockSize Blake2b_512
 
-  return $ SignatureHash (initialize (LBS.toStrict salt1))
-                         (initialize (LBS.toStrict salt2))
-                         (initialize (LBS.toStrict salt3))
-                         (initialize (LBS.toStrict salt4))
+  return $ SignatureHash (initialize salt1)
+                         (initialize salt2)
+                         (initialize salt3)
+                         (initialize salt4)
 
 signatureUpdate (SignatureHash s1 s2 s3 s4) d = (SignatureHash s1' s2' s3' s4')
   where
@@ -49,7 +50,7 @@ writeAndHash writer input = do
 
   bigHashes <- createBigSignatureHash
 
-  let hash' = initialize (LBS.toStrict hashSalt) :: Context SHA1
+  let hash' = initialize hashSalt :: Context SHA1
       writeAndHashRecursive input' h1 h2 = if LBS.length input' == 0
                                               then return $ Right $ (finalize h1, signatureFinalize h2)
                                               else do
@@ -59,7 +60,7 @@ writeAndHash writer input = do
                                                   Left str -> return $ Left str
                                                   Right () -> do
                                                     macXorBytes <- getRandomByteStringM 1
-                                                    let [macXorByte] = LBS.unpack macXorBytes
+                                                    let [macXorByte] = BS.unpack macXorBytes
                                                         macByte = LBS.map (\x -> xor x macXorByte) byte
                                                         macByte' = LBS.toStrict macByte
                                                         newHash = update h1 macByte'
@@ -83,7 +84,7 @@ readUntilHash reader = do
   bigHashes <- createBigSignatureHash
 
   let Just digest = digestFromByteString $ LBS.toStrict hash
-      hash' = initialize (LBS.toStrict hashSalt) :: Context SHA1
+      hash' = initialize hashSalt :: Context SHA1
       readUntilHashMatch h1 h2 readData = if (hmacGetDigest $ finalize h1) == digest
                                              then return $ Just (LBS.pack $ reverse readData, LBS.pack $ signatureFinalize h2)
                                              else bytesAvailable reader >>= \bytesLeft ->
@@ -92,7 +93,7 @@ readUntilHash reader = do
                                                   else do
                                                     b <- readBytes reader 1
                                                     macXorBytes <- getRandomByteStringM 1
-                                                    let [macXorByte] = LBS.unpack macXorBytes
+                                                    let [macXorByte] = BS.unpack macXorBytes
                                                         macByte = LBS.map (\x -> xor x macXorByte) b
                                                         macByte' = LBS.toStrict macByte
                                                         newHash = update h1 macByte'

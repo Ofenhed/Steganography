@@ -7,7 +7,7 @@ import Control.Monad.ST (runST, ST())
 import Control.Monad.ST.Unsafe (unsafeIOToST)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad (when)
-import Crypto.RandomMonad (runRndT, newRandomElementST, RndStateList(RndStateListParallel))
+import Crypto.RandomMonad (runRndT, newRandomElementST, RndStateList(..), RndStateParallelization(..), seedFromBytestringsThreaded)
 import CryptoState (createPublicKeyState, readPrivateKey, addAdditionalPrivatePkiState, addAdditionalPublicPkiState, createRandomStates, createSignatureState, createVerifySignatureState, addSignature, verifySignature)
 import Data.Array.ST (STArray(), newArray)
 import Data.Maybe (isJust, fromJust)
@@ -49,7 +49,7 @@ doEncrypt imageFile containerType secretFile loops inputData salt pkiFile signFi
         case container of
           Left err -> return $ Left $ "Could not read image file"
           Right container' -> do
-            (result, _) <- runRndT (RndStateListParallel [(BiS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)]) $ do
+            (result, _) <- runRndT (RndStateList RndStatePrecalculate (seedFromBytestringsThreaded $ hmacSha512Pbkdf2 secretFile salt loops)) $ do
               do -- Seperate context for IO operations
                 timeBefore <- lift $ unsafeIOToST getCurrentTime
                 createRandomStates container' salt (fromIntegral $ BS.length secretFile)
@@ -84,7 +84,7 @@ doDecrypt imageFile containerType secretFile loops salt pkiFile signFile = do
         case container of
           Left err -> error "" -- TODO: Make sure this compiles with Left
           Right reader -> do
-            (result, _) <- runRndT (RndStateListParallel [(BiS.bitStringLazy $ hmacSha512Pbkdf2 secretFile salt loops)]) $ do
+            (result, _) <- runRndT (RndStateList RndStatePrecalculate (seedFromBytestringsThreaded $ hmacSha512Pbkdf2 secretFile salt loops)) $ do
               createRandomStates reader salt $ fromIntegral $ BS.length secretFile
               addAdditionalPrivatePkiState privateKey reader
               hiddenData <- readUntilHash reader

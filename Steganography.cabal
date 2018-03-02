@@ -24,7 +24,7 @@ Executable Steganography-commandline
                      base64-bytestring,
                      binary,
                      bitstring,
-                     BitStringRandomMonad >= 1.0.0.0,
+                     BitStringRandomMonad >= 1.1.0.0,
                      bytestring,
                      console-program,
                      cryptonite,

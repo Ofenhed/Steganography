@@ -12,8 +12,8 @@ import Crypto.Hash (SHA3_256(..), hashDigestSize)
 import Crypto.PubKey.RSA.Types (private_size, Error(MessageTooLong), public_size)
 import Crypto.Random.Entropy (getEntropy)
 import safe Control.Exception (Exception, throw)
-import safe Crypto.Error (CryptoFailable(CryptoPassed))
-import safe Crypto.RandomMonad (replaceSeedM, addSeedM, getRandomByteStringM, RndST)
+import Crypto.Error (CryptoFailable(CryptoPassed))
+import safe Crypto.RandomMonad (replaceSeedM, addSeedM, getRandomByteStringM, RndST, seedFromBytestrings, seedFromBytestringsM)
 import safe Data.Maybe (isNothing, isJust, fromJust)
 import safe Data.Typeable (Typeable)
 import safe Data.Word (Word8)
@@ -91,13 +91,14 @@ addAdditionalPrivatePkiState (Just (PrivatePkiRsa key)) reader = do
   encrypted <- readBytes reader $ fromIntegral $ private_size key
   let Right decrypted = OAEP.decrypt Nothing oaepParams key (LBS.toStrict encrypted)
   salt <- getRandomByteStringM 256
-  addSeedM [(BiS.bitStringLazy $ hmacSha512Pbkdf2 decrypted (LBS.toStrict salt) 5)]
+  seed <-seedFromBytestringsM $ hmacSha512Pbkdf2 decrypted salt 5
+  addSeedM seed
 
 addAdditionalPrivatePkiState (Just (PrivatePkiEcc key)) reader = do
   encryptedKey <- readBytes reader $ 32 -- ECC key size
   let CryptoPassed pubKey = Curve.publicKey $ LBS.toStrict encryptedKey
       key' = BS.pack $ BA.unpack $ Curve.dh pubKey $ EccKeys.getSecretCryptoKey key
-  addSeedM $ createAes256RngState $ key'
+  addSeedM $ seedFromBytestrings $ createAes256RngState $ key'
 --------------------------------------------------------------------------------
 addAdditionalPublicPkiState Nothing _ = return $ Right ()
 
@@ -112,7 +113,8 @@ addAdditionalPublicPkiState (Just (PublicPkiRsa (seed, secret, key))) writer = d
            Left err -> return $ Left err
            Right _ -> do
              salt <- getRandomByteStringM 256
-             addSeedM [BiS.bitStringLazy $ hmacSha512Pbkdf2 (BS.pack secret) (LBS.toStrict salt) 5]
+             seed <- seedFromBytestringsM $ hmacSha512Pbkdf2 (BS.pack secret) salt 5
+             addSeedM seed
              return $ Right ()
 
 addAdditionalPublicPkiState (Just (PublicPkiEcc temporaryKey publicKey)) writer = do
@@ -123,7 +125,7 @@ addAdditionalPublicPkiState (Just (PublicPkiEcc temporaryKey publicKey)) writer 
   case result of
     Left msg -> return $ Left msg
     Right () -> do
-      addSeedM $ createAes256RngState key
+      addSeedM $ seedFromBytestrings $ createAes256RngState key
       return $ Right ()
 --------------------------------------------------------------------------------
 
@@ -143,7 +145,7 @@ addSignature (Just (PrivatePkiEcc key)) msg writer = do
        Just k -> do
          hashPosition <- getPrimitives writer 512 -- Signature size
          signatureSalt <- getRandomByteStringM 64
-         let toSign = BS.pack $ (LBS.unpack signatureSalt) ++  msg
+         let toSign = BS.pack $ (BS.unpack signatureSalt) ++  msg
              signature = ED.sign k (ED.toPublic k) toSign
          result <- writeBytesP writer hashPosition (LBS.pack $ BA.unpack signature)
          case result of
@@ -165,7 +167,7 @@ verifySignature (Just (PublicPkiEcc _ key)) msg reader = do
   let signature' = ED.signature $ BS.pack $ LBS.unpack signature
   case (key', signature') of
        (Just k, CryptoPassed s) -> do
-         let toSign = BS.append (LBS.toStrict signatureSalt) msg
+         let toSign = BS.append signatureSalt msg
          return $ Just $ ED.verify k toSign s
        _ -> throw CouldNotVerifySignature
 --------------------------------------------------------------------------------
@@ -176,7 +178,8 @@ createRandomStates reader salt minimumEntropyBytes = do
   extraSalt <- getRandomByteStringM $ max 0 $ minimumEntropyBytes - (fromIntegral $ quot saltLength 8)
   newPbkdfSecret <- getRandomByteStringM 256
   aesSecret1 <- getRandomByteStringM 32
-  replaceSeedM [BiS.bitStringLazy $ hmacSha512Pbkdf2 (LBS.toStrict newPbkdfSecret) (BS.concat [LBS.toStrict bigSalt, salt, LBS.toStrict extraSalt]) 5]
+  seed <- seedFromBytestringsM $ hmacSha512Pbkdf2 newPbkdfSecret (BS.concat [LBS.toStrict bigSalt, salt, extraSalt]) 5
+  replaceSeedM seed
   aesSecret2 <- getRandomByteStringM 32
-  addSeedM $ createAes256RngState $ LBS.toStrict aesSecret1
-  addSeedM $ createAes256RngState $ LBS.toStrict aesSecret2
+  addSeedM $ seedFromBytestrings $ createAes256RngState $ aesSecret1
+  addSeedM $ seedFromBytestrings $ createAes256RngState $ aesSecret2
