@@ -91,7 +91,7 @@ addAdditionalPrivatePkiState (Just (PrivatePkiRsa key)) reader = do
   encrypted <- readBytes reader $ fromIntegral $ private_size key
   let Right decrypted = OAEP.decrypt Nothing oaepParams key (LBS.toStrict encrypted)
   salt <- getRandomByteStringM 256
-  seed <-seedFromBytestringsM $ hmacSha512Pbkdf2 decrypted salt 5
+  seed <- seedFromBytestringsM $ hmacSha512Pbkdf2 decrypted salt 5
   addSeedM seed
 
 addAdditionalPrivatePkiState (Just (PrivatePkiEcc key)) reader = do
