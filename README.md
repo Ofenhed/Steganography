@@ -159,7 +159,7 @@ The header for public key encryption will be the key size of the PKI key + 160 b
 As shown in the table, everything is encrypted with the symmetric key and there is no known data in the protocol (such as length fields or a boolean informing if there is a PKI encrypted key or not) which an attacker could try to use to gain more knowledge. Notice also that unlike this table there is no end of the User Data until every single pixel in the image has been used up, so without the encryption key it is not possible to know the exact length of the user data. An attack where the attacker is able to decrypt the data could ofcourse allow the attacker to guess the length based on the data it decrypts, but actually decrypting the data would require the attacker to hold the key mass which would also unlock the SHA1 HMAC, so it's not viable to decrypt the data without being able to verify the data against the SHA1 HMAC. Notice that it may be possible for the attacker could get a pretty good approximation of the length of the hidden data anyways, see Known weaknesses.
 
 ### Known weaknesses
-PBKDF2 is sensitive to SIMD brute force attacks, so in the future I will move away from it as my default PRNG.
+PBKDF2 is sensitive to SIMD brute force attacks. For this reason, this program uses a modified version of PBKDF2 which removes this weakness. This modified verison, however, has not gone through the same scrutiny as PBKDF2, which means that it may have introduced new weaknesses.
 
 **Using public key cryptography introduces brute force weakness**. Since OAEP has a checksum of sorts anyone with the private RSA key (which should not be the attacker) can brute force the symmetric key without having to verify the header against the data for every single attempt. Since the heaviest workload should be done before the RSA key is added into the mix (by having a strong key or a large number of iterations) this shouldn't be a problem in reality.
 
@@ -167,6 +167,8 @@ PBKDF2 is sensitive to SIMD brute force attacks, so in the future I will move aw
 
 ## Future thoughts
 I will add additional PRNG's. The one that comes to mind now is scrypt.
+
+I will add additional formats to hide data in. Primary goal is JPEG, as it opens up the possibility of using MPEG in the future.
 
 As this project is still in early development, I do not guarantee backwards or forwards compatibility between versions of this program.
 
